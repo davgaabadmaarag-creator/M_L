@@ -1,108 +1,76 @@
 Teen Mental Health ML Project Results
-=============================================
-Dataset shape: (1200, 13)
-Target column: stress_level
-Numeric features: ['age', 'daily_social_media_hours', 'sleep_hours', 'screen_time_before_sleep', 'academic_performance', 'physical_activity', 'anxiety_level', 'addiction_level', 'depression_label']
-Categorical features: ['gender', 'platform_usage', 'social_interaction_level']
+Depression label was removed and not used.
+=======================================================
+Dataset shape after processing: (1200, 15)
+Removed columns: ['depression_label']
+Target column: mental_health_risk_level
+Target creation: mean(stress_level, anxiety_level, addiction_level) => Low/Medium/High
+Input numeric features: ['age', 'daily_social_media_hours', 'sleep_hours', 'screen_time_before_sleep', 'academic_performance', 'physical_activity']
+Input categorical features: ['gender', 'platform_usage', 'social_interaction_level']
+
+Target distribution:
+mental_health_risk_level
+Medium    714
+High      284
+Low       202
+Name: count, dtype: int64
 
 
 Naive Bayes
 -----------
-Accuracy: 0.0958
+Accuracy: 0.5958
 Classification report:
               precision    recall  f1-score   support
 
-           1       0.11      0.22      0.15        27
-          10       0.00      0.00      0.00        25
-           2       0.06      0.09      0.08        22
-           3       0.17      0.22      0.19        23
-           4       0.08      0.14      0.10        28
-           5       0.06      0.08      0.07        26
-           6       0.09      0.13      0.10        23
-           7       0.50      0.05      0.09        21
-           8       0.00      0.00      0.00        21
-           9       0.00      0.00      0.00        24
+        High       0.00      0.00      0.00        57
+         Low       0.00      0.00      0.00        40
+      Medium       0.60      1.00      0.75       143
 
-    accuracy                           0.10       240
-   macro avg       0.11      0.09      0.08       240
-weighted avg       0.10      0.10      0.08       240
+    accuracy                           0.60       240
+   macro avg       0.20      0.33      0.25       240
+weighted avg       0.36      0.60      0.44       240
 
 Confusion matrix:
-[[ 6  0  4  3 11  1  2  0  0  0]
- [ 5  0  0  5  4  4  4  1  2  0]
- [ 7  0  2  3  4  1  5  0  0  0]
- [ 2  0  4  5  4  6  2  0  0  0]
- [ 7  0  6  1  4  7  3  0  0  0]
- [ 8  0  5  2  6  2  3  0  0  0]
- [ 6  0  1  4  3  6  3  0  0  0]
- [ 7  0  0  2  6  0  4  1  1  0]
- [ 1  0  6  1  4  3  6  0  0  0]
- [ 6  0  3  4  4  3  3  0  1  0]]
+[[  0  40   0]
+ [  0 143   0]
+ [  0  57   0]]
 
 Decision Tree
 -------------
-Accuracy: 0.1125
+Accuracy: 0.5708
 Classification report:
               precision    recall  f1-score   support
 
-           1       0.13      0.59      0.21        27
-          10       0.10      0.12      0.11        25
-           2       0.00      0.00      0.00        22
-           3       0.00      0.00      0.00        23
-           4       0.10      0.11      0.10        28
-           5       0.00      0.00      0.00        26
-           6       0.00      0.00      0.00        23
-           7       0.00      0.00      0.00        21
-           8       0.00      0.00      0.00        21
-           9       0.10      0.21      0.14        24
+        High       0.22      0.04      0.06        57
+         Low       0.00      0.00      0.00        40
+      Medium       0.60      0.94      0.74       143
 
-    accuracy                           0.11       240
-   macro avg       0.04      0.10      0.06       240
-weighted avg       0.05      0.11      0.06       240
+    accuracy                           0.57       240
+   macro avg       0.27      0.33      0.27       240
+weighted avg       0.41      0.57      0.45       240
 
 Confusion matrix:
-[[16  0  0  0  3  0  0  0  0  8]
- [15  3  0  0  4  0  0  1  0  2]
- [13  5  0  0  1  0  0  0  0  3]
- [15  3  0  0  2  0  0  0  0  3]
- [11  6  0  1  3  0  0  0  0  7]
- [15  2  0  0  4  0  0  0  0  5]
- [12  1  0  1  4  0  0  0  0  5]
- [ 9  5  0  0  2  0  0  0  0  5]
- [ 8  1  0  1  6  0  0  0  0  5]
- [13  5  0  0  1  0  0  0  0  5]]
+[[  0  37   3]
+ [  4 135   4]
+ [  3  52   2]]
 
 Logistic Regression
 -------------------
-Accuracy: 0.1083
+Accuracy: 0.5958
 Classification report:
               precision    recall  f1-score   support
 
-           1       0.15      0.15      0.15        27
-          10       0.13      0.24      0.17        25
-           2       0.05      0.05      0.05        22
-           3       0.16      0.13      0.14        23
-           4       0.07      0.11      0.09        28
-           5       0.05      0.04      0.04        26
-           6       0.17      0.17      0.17        23
-           7       0.18      0.19      0.19        21
-           8       0.00      0.00      0.00        21
-           9       0.00      0.00      0.00        24
+        High       0.00      0.00      0.00        57
+         Low       0.00      0.00      0.00        40
+      Medium       0.60      1.00      0.75       143
 
-    accuracy                           0.11       240
-   macro avg       0.10      0.11      0.10       240
-weighted avg       0.10      0.11      0.10       240
+    accuracy                           0.60       240
+   macro avg       0.20      0.33      0.25       240
+weighted avg       0.36      0.60      0.44       240
 
 Confusion matrix:
-[[ 4  3  4  2 10  0  2  1  0  1]
- [ 3  6  0  2  5  3  3  2  1  0]
- [ 4  3  1  4  2  0  4  1  1  2]
- [ 2  7  2  3  3  4  0  2  0  0]
- [ 2  7  3  0  3  3  2  3  1  4]
- [ 2  4  5  0  6  1  0  2  2  4]
- [ 5  4  0  3  2  4  4  1  0  0]
- [ 2  2  0  2  6  0  3  4  1  1]
- [ 1  4  2  1  4  3  2  3  0  1]
- [ 1  6  3  2  1  3  3  3  2  0]]
+[[  0  40   0]
+ [  0 143   0]
+ [  0  57   0]]
 
-Best model: Decision Tree, Accuracy: 0.1125
+Best model: Naive Bayes, Accuracy: 0.5958

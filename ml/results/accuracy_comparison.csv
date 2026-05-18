@@ -1,4 +1,4 @@
 ﻿Model,Accuracy
-Decision Tree,0.1125
-Logistic Regression,0.1083
-Naive Bayes,0.0958
+Naive Bayes,0.5958
+Logistic Regression,0.5958
+Decision Tree,0.5708

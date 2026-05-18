@@ -1,0 +1,20 @@
+Single Profile Analysis
+==============================
+Model used: Naive Bayes
+Predicted mental health risk level: Medium
+Prediction probabilities:
+- Medium: 65.9%
+- Low: 17.2%
+- High: 17.0%
+
+Lifestyle comparison with the dataset:
+- Daily social media hours: 8.00, higher than dataset average (4.54); gap vs high-stress avg=+3.33; risk-increasing signal.
+- Sleep hours: 5.00, lower than dataset average (6.45); gap vs high-stress avg=-1.42; risk-increasing signal.
+- Screen time before sleep: 3.00, higher than dataset average (1.74); gap vs high-stress avg=+1.26; risk-increasing signal.
+- Physical activity: 0.50, lower than dataset average (1.01); gap vs high-stress avg=-0.50; risk-increasing signal.
+- Academic performance: 3.20, higher than dataset average (2.99); gap vs high-stress avg=+0.21; not below the high-stress average.
+
+Interpretation guide:
+- Higher social media hours and more screen time before sleep can be discussed as possible risk signals.
+- Lower sleep hours and lower physical activity can be discussed as lifestyle risk signals.
+- This output is an educational ML estimate, not a medical diagnosis.

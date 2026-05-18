@@ -11,4 +11,6 @@ social_interaction_level,0
 stress_level,0
 anxiety_level,0
 addiction_level,0
-depression_label,0
+mental_health_risk_score,0
+mental_health_risk_level,0
+stress_group,0

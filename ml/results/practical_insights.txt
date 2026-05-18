@@ -1,0 +1,36 @@
+Practical Insights for Teen Mental Health ML Project
+============================================================
+Total rows after cleaning: 1200
+High stress rows (stress_level >= 7): 460 (38.3%)
+
+1. High stress group profile
+------------------------------
+daily_social_media_hours: high stress avg=4.67, other avg=4.46, diff=+0.21
+sleep_hours: high stress avg=6.42, other avg=6.47, diff=-0.04
+screen_time_before_sleep: high stress avg=1.74, other avg=1.74, diff=+0.00
+academic_performance: high stress avg=2.99, other avg=2.99, diff=-0.00
+physical_activity: high stress avg=1.00, other avg=1.02, diff=-0.02
+anxiety_level: high stress avg=5.66, other avg=5.62, diff=+0.03
+addiction_level: high stress avg=5.61, other avg=5.54, diff=+0.07
+mental_health_risk_score: high stress avg=6.62, other avg=4.88, diff=+1.74
+
+2. Most common platforms among high-stress rows
+------------------------------------------------
+Both: 34.8%
+Instagram: 33.5%
+TikTok: 31.7%
+
+3. Platform-level high stress rate
+------------------------------------
+Both: high_stress_rate=40.9%, avg_social_hours=4.52, avg_sleep=6.46
+Instagram: high_stress_rate=37.5%, avg_social_hours=4.56, avg_sleep=6.44
+TikTok: high_stress_rate=36.7%, avg_social_hours=4.53, avg_sleep=6.45
+
+4. How to use these findings
+------------------------------
+Use this section to explain practical patterns, for example:
+- People in the high-stress group can be compared with other groups by social media hours.
+- Platform summaries show where high stress rates are relatively higher in this dataset.
+- Sleep hours, screen time before sleep, and physical activity help explain lifestyle differences.
+
+Important: These results are educational and data-driven. They are not a clinical diagnosis.

@@ -1,23 +1,24 @@
+import argparse
 import os
 import re
 import sys
 import warnings
 from pathlib import Path
- 
+
 RESULT_DIR = Path("results")
 RESULT_DIR.mkdir(exist_ok=True)
 MPL_CONFIG_DIR = RESULT_DIR / ".matplotlib"
 MPL_CONFIG_DIR.mkdir(exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(MPL_CONFIG_DIR))
- 
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
- 
+
 import pandas as pd
 import matplotlib.pyplot as plt
- 
+
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -27,52 +28,96 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
- 
+
 warnings.filterwarnings("ignore")
- 
+
 DATA_FILE = "Teen_Mental_Health_Dataset.csv"
 DROP_COLUMNS = ["depression_label"]
 LEVEL_COLUMNS = ["stress_level", "anxiety_level", "addiction_level"]
- 
- 
+RISK_ORDER = ["Low", "Medium", "High"]
+STRESS_ORDER = ["Low stress", "Medium stress", "High stress"]
+PROFILE_FEATURES = [
+    "daily_social_media_hours",
+    "sleep_hours",
+    "screen_time_before_sleep",
+    "academic_performance",
+    "physical_activity",
+    "anxiety_level",
+    "addiction_level",
+    "mental_health_risk_score",
+]
+
+
 def clean_col(name: str) -> str:
-    """Баганын нэрийг Python-д ашиглахад хялбар snake_case хэлбэрт оруулна."""
+    """Convert column names to simple snake_case names."""
     name = name.strip().lower()
     name = re.sub(r"[^a-z0-9]+", "_", name)
     return name.strip("_")
- 
- 
+
+
 def create_risk_level(df: pd.DataFrame) -> pd.DataFrame:
-    """Stress, anxiety, addiction 1-10 оноонд үндэслэн шинэ target үүсгэнэ.
- 
-    mental_health_risk_score = stress/anxiety/addiction-ийн дундаж оноо
-    1.0 - 3.99  => Low
-    4.0 - 6.99  => Medium
-    7.0 - 10.0  => High
-    """
+    """Create Low/Medium/High risk labels from stress, anxiety, addiction."""
     missing = [col for col in LEVEL_COLUMNS if col not in df.columns]
     if missing:
-        raise ValueError(f"Target үүсгэхэд хэрэгтэй багана олдсонгүй: {missing}")
- 
+        raise ValueError(f"Required columns are missing: {missing}")
+
     df = df.copy()
     df["mental_health_risk_score"] = df[LEVEL_COLUMNS].mean(axis=1)
     df["mental_health_risk_level"] = pd.cut(
         df["mental_health_risk_score"],
         bins=[0, 4, 7, 10],
-        labels=["Low", "Medium", "High"],
+        labels=RISK_ORDER,
         include_lowest=True,
         right=False,
     )
- 
-    # score яг 10 гарсан мөрийг High болгох
+
     df.loc[df["mental_health_risk_score"] == 10, "mental_health_risk_level"] = "High"
     df["mental_health_risk_level"] = df["mental_health_risk_level"].astype(str)
     return df
- 
- 
+
+
+def add_stress_group(df: pd.DataFrame) -> pd.DataFrame:
+    """Add an interpretable stress group for practical analysis."""
+    df = df.copy()
+    df["stress_group"] = pd.cut(
+        df["stress_level"],
+        bins=[0, 4, 7, 10],
+        labels=STRESS_ORDER,
+        include_lowest=True,
+        right=False,
+    )
+    df.loc[df["stress_level"] == 10, "stress_group"] = "High stress"
+    df["stress_group"] = df["stress_group"].astype(str)
+    return df
+
+
+def make_one_hot_encoder() -> OneHotEncoder:
+    """Support both old and new scikit-learn OneHotEncoder APIs."""
+    try:
+        return OneHotEncoder(handle_unknown="ignore", sparse_output=False)
+    except TypeError:
+        return OneHotEncoder(handle_unknown="ignore", sparse=False)
+
+
+def load_dataset() -> tuple[pd.DataFrame, list[str]]:
+    if not os.path.exists(DATA_FILE):
+        raise FileNotFoundError(
+            f"{DATA_FILE} was not found. Put the dataset in the same folder as this script."
+        )
+
+    df = pd.read_csv(DATA_FILE)
+    df.columns = [clean_col(c) for c in df.columns]
+    df = df.drop_duplicates()
+
+    existing_drop_cols = [col for col in DROP_COLUMNS if col in df.columns]
+    df = df.drop(columns=existing_drop_cols)
+    df = create_risk_level(df)
+    df = add_stress_group(df)
+    return df, existing_drop_cols
+
+
 def save_basic_visualizations(df: pd.DataFrame) -> None:
-    """Өгөгдлийн үндсэн зураглалуудыг хадгална."""
-    # 1) 1-10 level багануудын тархалт
+    """Save the basic EDA charts used in the report."""
     for col in LEVEL_COLUMNS:
         if col in df.columns:
             plt.figure(figsize=(7, 5))
@@ -83,22 +128,22 @@ def save_basic_visualizations(df: pd.DataFrame) -> None:
             plt.tight_layout()
             plt.savefig(RESULT_DIR / f"{col}_distribution.png", dpi=200)
             plt.close()
- 
-    # 2) Шинээр үүсгэсэн target-ийн тархалт
+
     plt.figure(figsize=(7, 5))
-    df["mental_health_risk_level"].value_counts().reindex(["Low", "Medium", "High"]).plot(kind="bar")
+    df["mental_health_risk_level"].value_counts().reindex(RISK_ORDER).plot(kind="bar")
     plt.title("Mental Health Risk Level Distribution")
     plt.xlabel("Risk Level")
     plt.ylabel("Count")
     plt.tight_layout()
     plt.savefig(RESULT_DIR / "mental_health_risk_distribution.png", dpi=200)
+    plt.savefig(RESULT_DIR / "target_distribution.png", dpi=200)
     plt.close()
- 
-    # 3) Platform бүрийн дундаж risk score
+
     if "platform_usage" in df.columns:
-        platform_avg = df.groupby("platform_usage")["mental_health_risk_score"].mean().sort_values(ascending=False)
+        platform_avg = df.groupby("platform_usage")["mental_health_risk_score"].mean()
+        platform_avg = platform_avg.sort_values(ascending=False)
         platform_avg.to_csv(RESULT_DIR / "average_risk_by_platform.csv", encoding="utf-8-sig")
- 
+
         plt.figure(figsize=(7, 5))
         platform_avg.plot(kind="bar")
         plt.title("Average Risk Score by Platform")
@@ -107,13 +152,12 @@ def save_basic_visualizations(df: pd.DataFrame) -> None:
         plt.tight_layout()
         plt.savefig(RESULT_DIR / "average_risk_by_platform.png", dpi=200)
         plt.close()
- 
-    # 4) Correlation matrix
+
     numeric_cols = df.select_dtypes(include=["int64", "float64", "int32", "float32"]).columns.tolist()
     if len(numeric_cols) >= 2:
         corr = df[numeric_cols].corr(numeric_only=True)
         corr.to_csv(RESULT_DIR / "correlation_matrix.csv", encoding="utf-8-sig")
- 
+
         plt.figure(figsize=(10, 8))
         plt.imshow(corr, aspect="auto")
         plt.colorbar()
@@ -123,147 +167,284 @@ def save_basic_visualizations(df: pd.DataFrame) -> None:
         plt.tight_layout()
         plt.savefig(RESULT_DIR / "correlation_matrix.png", dpi=200)
         plt.close()
- 
- 
-def main():
-    if not os.path.exists(DATA_FILE):
-        raise FileNotFoundError(
-            f"{DATA_FILE} олдсонгүй. Dataset-ээ энэ кодтой нэг хавтаст байрлуулна уу."
+
+
+def available_profile_features(df: pd.DataFrame) -> list[str]:
+    return [col for col in PROFILE_FEATURES if col in df.columns]
+
+
+def save_practical_analysis(df: pd.DataFrame) -> None:
+    """Create practical summaries such as high-stress behavior profiles."""
+    profile_cols = available_profile_features(df)
+    high_stress = df[df["stress_level"] >= 7]
+    not_high_stress = df[df["stress_level"] < 7]
+
+    risk_profile = df.groupby("mental_health_risk_level")[profile_cols].mean()
+    risk_profile = risk_profile.reindex(RISK_ORDER)
+    risk_profile.to_csv(RESULT_DIR / "risk_level_profile.csv", encoding="utf-8-sig")
+
+    stress_profile = df.groupby("stress_group")[profile_cols].mean()
+    stress_profile = stress_profile.reindex(STRESS_ORDER)
+    stress_profile.to_csv(RESULT_DIR / "stress_group_profile.csv", encoding="utf-8-sig")
+
+    if "platform_usage" in df.columns:
+        platform_summary = df.groupby("platform_usage").agg(
+            count=("platform_usage", "size"),
+            avg_stress_level=("stress_level", "mean"),
+            avg_risk_score=("mental_health_risk_score", "mean"),
+            avg_social_media_hours=("daily_social_media_hours", "mean"),
+            avg_sleep_hours=("sleep_hours", "mean"),
+            avg_screen_time_before_sleep=("screen_time_before_sleep", "mean"),
         )
- 
-    # 1. Өгөгдөл унших
-    df = pd.read_csv(DATA_FILE)
-    df.columns = [clean_col(c) for c in df.columns]
-    df = df.drop_duplicates()
- 
-    # 2. depression_label-ийг бүрэн хасах
-    existing_drop_cols = [col for col in DROP_COLUMNS if col in df.columns]
-    df = df.drop(columns=existing_drop_cols)
- 
-    # 3. Stress/anxiety/addiction дээр үндэслэн target үүсгэх
-    df = create_risk_level(df)
- 
-    print("Эхний 5 мөр:")
-    print(df.head())
-    print("\nӨгөгдлийн хэмжээ:", df.shape)
-    print("\nБаганын нэрс:", list(df.columns))
-    print("\nDepression label ашигласан эсэх:", "depression_label" in df.columns)
-    print("\nTarget тархалт:")
-    print(df["mental_health_risk_level"].value_counts())
- 
-    # 4. Missing values хадгалах
-    missing_table = df.isnull().sum().sort_values(ascending=False)
-    missing_table.to_csv(RESULT_DIR / "missing_values.csv", encoding="utf-8-sig")
- 
-    # 5. Visualization хадгалах
-    save_basic_visualizations(df)
- 
-    # 6. ML target ба feature сонгох
+        high_stress_rate = df.assign(is_high_stress=df["stress_level"] >= 7)
+        high_stress_rate = high_stress_rate.groupby("platform_usage")["is_high_stress"].mean() * 100
+        platform_summary["high_stress_rate_pct"] = high_stress_rate
+        platform_summary = platform_summary.sort_values("high_stress_rate_pct", ascending=False)
+        platform_summary.to_csv(RESULT_DIR / "platform_stress_summary.csv", encoding="utf-8-sig")
+
+        plt.figure(figsize=(8, 5))
+        platform_summary["high_stress_rate_pct"].plot(kind="bar")
+        plt.title("High Stress Rate by Platform")
+        plt.xlabel("Platform")
+        plt.ylabel("High stress rate (%)")
+        plt.tight_layout()
+        plt.savefig(RESULT_DIR / "high_stress_by_platform.png", dpi=200)
+        plt.close()
+
+    trend = df.groupby("stress_level")["daily_social_media_hours"].mean()
+    trend.to_csv(RESULT_DIR / "social_media_by_stress_level.csv", encoding="utf-8-sig")
+
+    plt.figure(figsize=(8, 5))
+    trend.plot(kind="line", marker="o")
+    plt.title("Average Social Media Hours by Stress Level")
+    plt.xlabel("Stress level")
+    plt.ylabel("Average daily social media hours")
+    plt.xticks(sorted(df["stress_level"].dropna().unique()))
+    plt.tight_layout()
+    plt.savefig(RESULT_DIR / "social_media_by_stress_level.png", dpi=200)
+    plt.close()
+
+    plot_cols = [
+        col
+        for col in [
+            "daily_social_media_hours",
+            "sleep_hours",
+            "screen_time_before_sleep",
+            "physical_activity",
+        ]
+        if col in risk_profile.columns
+    ]
+    if plot_cols:
+        plt.figure(figsize=(9, 5))
+        risk_profile[plot_cols].plot(kind="bar")
+        plt.title("Lifestyle Profile by Risk Level")
+        plt.xlabel("Risk level")
+        plt.ylabel("Average value")
+        plt.xticks(rotation=0)
+        plt.tight_layout()
+        plt.savefig(RESULT_DIR / "risk_level_lifestyle_profile.png", dpi=200)
+        plt.close()
+
+    lines = [
+        "Practical Insights for Teen Mental Health ML Project",
+        "=" * 60,
+        f"Total rows after cleaning: {len(df)}",
+        f"High stress rows (stress_level >= 7): {len(high_stress)} "
+        f"({len(high_stress) / len(df) * 100:.1f}%)",
+        "",
+        "1. High stress group profile",
+        "-" * 30,
+    ]
+
+    for col in profile_cols:
+        high_mean = high_stress[col].mean()
+        other_mean = not_high_stress[col].mean()
+        diff = high_mean - other_mean
+        lines.append(
+            f"{col}: high stress avg={high_mean:.2f}, other avg={other_mean:.2f}, diff={diff:+.2f}"
+        )
+
+    if "platform_usage" in df.columns:
+        lines.extend(["", "2. Most common platforms among high-stress rows", "-" * 48])
+        platform_share = high_stress["platform_usage"].value_counts(normalize=True).mul(100)
+        for platform, pct in platform_share.items():
+            lines.append(f"{platform}: {pct:.1f}%")
+
+        lines.extend(["", "3. Platform-level high stress rate", "-" * 36])
+        for platform, row in platform_summary.iterrows():
+            lines.append(
+                f"{platform}: high_stress_rate={row['high_stress_rate_pct']:.1f}%, "
+                f"avg_social_hours={row['avg_social_media_hours']:.2f}, "
+                f"avg_sleep={row['avg_sleep_hours']:.2f}"
+            )
+
+    lines.extend(
+        [
+            "",
+            "4. How to use these findings",
+            "-" * 30,
+            "Use this section to explain practical patterns, for example:",
+            "- People in the high-stress group can be compared with other groups by social media hours.",
+            "- Platform summaries show where high stress rates are relatively higher in this dataset.",
+            "- Sleep hours, screen time before sleep, and physical activity help explain lifestyle differences.",
+            "",
+            "Important: These results are educational and data-driven. They are not a clinical diagnosis.",
+        ]
+    )
+
+    (RESULT_DIR / "practical_insights.txt").write_text("\n".join(lines), encoding="utf-8")
+
+
+def split_features_target(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, list[str], list[str]]:
     target_col = "mental_health_risk_level"
- 
-    # Leakage-ээс сэргийлж target үүсгэсэн багануудыг input-оос хасна.
-    # Өөрөөр хэлбэл model нь social media/sleep/activity зэрэг lifestyle feature-үүдээр
-    # Low/Medium/High risk level-ийг таамаглана.
-    feature_drop_cols = [target_col, "mental_health_risk_score"] + LEVEL_COLUMNS
+    feature_drop_cols = [target_col, "mental_health_risk_score", "stress_group"] + LEVEL_COLUMNS
     X = df.drop(columns=[col for col in feature_drop_cols if col in df.columns])
     y = df[target_col]
- 
+
     valid_idx = y.notna() & (y.astype(str).str.lower() != "nan")
     X = X.loc[valid_idx].copy()
     y = y.loc[valid_idx].copy()
- 
+
     numeric_features = X.select_dtypes(include=["int64", "float64", "int32", "float32"]).columns.tolist()
     categorical_features = [c for c in X.columns if c not in numeric_features]
- 
-    numeric_transformer = Pipeline(steps=[
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
-    ])
- 
-    categorical_transformer = Pipeline(steps=[
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore")),
-    ])
- 
-    preprocessor = ColumnTransformer(
+    return X, y, numeric_features, categorical_features
+
+
+def build_preprocessor(numeric_features: list[str], categorical_features: list[str]) -> ColumnTransformer:
+    numeric_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ]
+    )
+
+    categorical_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", make_one_hot_encoder()),
+        ]
+    )
+
+    return ColumnTransformer(
         transformers=[
             ("num", numeric_transformer, numeric_features),
             ("cat", categorical_transformer, categorical_features),
         ]
     )
- 
-    class DenseTransformer:
-        def fit(self, X, y=None):
-            return self
- 
-        def transform(self, X):
-            return X.toarray() if hasattr(X, "toarray") else X
- 
+
+
+def build_models(numeric_features: list[str], categorical_features: list[str]) -> dict[str, Pipeline]:
+    return {
+        "Naive Bayes": Pipeline(
+            steps=[
+                ("preprocess", build_preprocessor(numeric_features, categorical_features)),
+                ("model", GaussianNB()),
+            ]
+        ),
+        "Decision Tree": Pipeline(
+            steps=[
+                ("preprocess", build_preprocessor(numeric_features, categorical_features)),
+                ("model", DecisionTreeClassifier(max_depth=4, random_state=42)),
+            ]
+        ),
+        "Logistic Regression": Pipeline(
+            steps=[
+                ("preprocess", build_preprocessor(numeric_features, categorical_features)),
+                ("model", LogisticRegression(max_iter=1000, random_state=42)),
+            ]
+        ),
+    }
+
+
+def save_decision_tree_feature_importance(model: Pipeline) -> None:
+    """Save the most useful explanatory output from the Decision Tree model."""
+    try:
+        preprocessor = model.named_steps["preprocess"]
+        tree = model.named_steps["model"]
+        feature_names = preprocessor.get_feature_names_out()
+    except Exception:
+        return
+
+    clean_names = [name.split("__", 1)[-1] for name in feature_names]
+    importance_df = pd.DataFrame(
+        {
+            "feature": clean_names,
+            "importance": tree.feature_importances_,
+        }
+    ).sort_values("importance", ascending=False)
+
+    importance_df.to_csv(RESULT_DIR / "decision_tree_feature_importance.csv", index=False, encoding="utf-8-sig")
+
+    top_features = importance_df.head(10).sort_values("importance")
+    if not top_features.empty:
+        plt.figure(figsize=(8, 5))
+        plt.barh(top_features["feature"], top_features["importance"])
+        plt.title("Top Decision Tree Feature Importance")
+        plt.xlabel("Importance")
+        plt.tight_layout()
+        plt.savefig(RESULT_DIR / "decision_tree_feature_importance.png", dpi=200)
+        plt.close()
+
+
+def train_and_evaluate_models(
+    df: pd.DataFrame,
+    existing_drop_cols: list[str],
+) -> tuple[pd.DataFrame, str, Pipeline, pd.DataFrame, pd.Series]:
+    X, y, numeric_features, categorical_features = split_features_target(df)
+    models = build_models(numeric_features, categorical_features)
+
     stratify = y if y.nunique() > 1 and y.value_counts().min() >= 2 else None
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=stratify
     )
- 
-    models = {
-        "Naive Bayes": Pipeline(steps=[
-            ("preprocess", preprocessor),
-            ("dense", DenseTransformer()),
-            ("model", GaussianNB()),
-        ]),
-        "Decision Tree": Pipeline(steps=[
-            ("preprocess", preprocessor),
-            ("model", DecisionTreeClassifier(max_depth=4, random_state=42)),
-        ]),
-        "Logistic Regression": Pipeline(steps=[
-            ("preprocess", preprocessor),
-            ("model", LogisticRegression(max_iter=1000, random_state=42)),
-        ]),
-    }
- 
+
     rows = []
+    fitted_models = {}
     best_model_name = None
     best_accuracy = -1
- 
+
     with open(RESULT_DIR / "model_results.txt", "w", encoding="utf-8") as f:
         f.write("Teen Mental Health ML Project Results\n")
         f.write("Depression label was removed and not used.\n")
         f.write("=" * 55 + "\n")
         f.write(f"Dataset shape after processing: {df.shape}\n")
         f.write(f"Removed columns: {existing_drop_cols}\n")
-        f.write(f"Target column: {target_col}\n")
+        f.write("Target column: mental_health_risk_level\n")
         f.write("Target creation: mean(stress_level, anxiety_level, addiction_level) => Low/Medium/High\n")
         f.write(f"Input numeric features: {numeric_features}\n")
         f.write(f"Input categorical features: {categorical_features}\n\n")
         f.write("Target distribution:\n")
         f.write(str(y.value_counts()))
         f.write("\n\n")
- 
+
         for name, model in models.items():
             model.fit(X_train, y_train)
+            fitted_models[name] = model
+            if name == "Decision Tree":
+                save_decision_tree_feature_importance(model)
+
             pred = model.predict(X_test)
             acc = accuracy_score(y_test, pred)
             rows.append({"Model": name, "Accuracy": round(acc, 4)})
- 
+
             f.write(f"\n{name}\n")
             f.write("-" * len(name) + "\n")
             f.write(f"Accuracy: {acc:.4f}\n")
             f.write("Classification report:\n")
             f.write(classification_report(y_test, pred, zero_division=0))
             f.write("\nConfusion matrix:\n")
-            f.write(str(confusion_matrix(y_test, pred, labels=["Low", "Medium", "High"])))
+            f.write(str(confusion_matrix(y_test, pred, labels=RISK_ORDER)))
             f.write("\n")
- 
+
             if acc > best_accuracy:
                 best_accuracy = acc
                 best_model_name = name
- 
+
         f.write(f"\nBest model: {best_model_name}, Accuracy: {best_accuracy:.4f}\n")
- 
+
     result_df = pd.DataFrame(rows).sort_values("Accuracy", ascending=False)
     result_df.to_csv(RESULT_DIR / "accuracy_comparison.csv", index=False, encoding="utf-8-sig")
-    print("\nЗагваруудын accuracy:")
-    print(result_df)
- 
+
     plt.figure(figsize=(8, 5))
     plt.bar(result_df["Model"], result_df["Accuracy"])
     plt.title("Model Accuracy Comparison")
@@ -274,9 +455,181 @@ def main():
     plt.tight_layout()
     plt.savefig(RESULT_DIR / "accuracy_comparison.png", dpi=200)
     plt.close()
- 
-    print("\nДууслаа. Үр дүн results/ хавтаст хадгалагдлаа.")
- 
- 
+
+    return result_df, best_model_name, fitted_models[best_model_name], X, y
+
+
+def describe_value_against_dataset(
+    label: str,
+    value: float,
+    overall_mean: float,
+    high_stress_mean: float,
+    higher_is_riskier: bool,
+) -> str:
+    if pd.isna(value):
+        return f"- {label}: no value was entered."
+
+    direction = "higher" if value > overall_mean else "lower"
+    comparison = f"{direction} than dataset average ({overall_mean:.2f})"
+    high_gap = value - high_stress_mean
+
+    if higher_is_riskier:
+        signal = "risk-increasing signal" if value > high_stress_mean else "not above the high-stress average"
+    else:
+        signal = "risk-increasing signal" if value < high_stress_mean else "not below the high-stress average"
+
+    return (
+        f"- {label}: {value:.2f}, {comparison}; "
+        f"gap vs high-stress avg={high_gap:+.2f}; {signal}."
+    )
+
+
+def analyze_single_profile(
+    model: Pipeline,
+    case_df: pd.DataFrame,
+    training_df: pd.DataFrame,
+    model_name: str,
+) -> str:
+    prediction = model.predict(case_df)[0]
+    lines = [
+        "Single Profile Analysis",
+        "=" * 30,
+        f"Model used: {model_name}",
+        f"Predicted mental health risk level: {prediction}",
+    ]
+
+    if hasattr(model, "predict_proba"):
+        probabilities = model.predict_proba(case_df)[0]
+        proba_pairs = sorted(
+            zip(model.classes_, probabilities),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        lines.append("Prediction probabilities:")
+        for label, prob in proba_pairs:
+            lines.append(f"- {label}: {prob * 100:.1f}%")
+
+    high_stress = training_df[training_df["stress_level"] >= 7]
+    lines.extend(["", "Lifestyle comparison with the dataset:"])
+
+    comparisons = [
+        ("daily_social_media_hours", "Daily social media hours", True),
+        ("sleep_hours", "Sleep hours", False),
+        ("screen_time_before_sleep", "Screen time before sleep", True),
+        ("physical_activity", "Physical activity", False),
+        ("academic_performance", "Academic performance", False),
+    ]
+
+    for col, label, higher_is_riskier in comparisons:
+        if col in case_df.columns and col in training_df.columns:
+            value = pd.to_numeric(case_df.iloc[0][col], errors="coerce")
+            lines.append(
+                describe_value_against_dataset(
+                    label=label,
+                    value=value,
+                    overall_mean=training_df[col].mean(),
+                    high_stress_mean=high_stress[col].mean(),
+                    higher_is_riskier=higher_is_riskier,
+                )
+            )
+
+    lines.extend(
+        [
+            "",
+            "Interpretation guide:",
+            "- Higher social media hours and more screen time before sleep can be discussed as possible risk signals.",
+            "- Lower sleep hours and lower physical activity can be discussed as lifestyle risk signals.",
+            "- This output is an educational ML estimate, not a medical diagnosis.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def prompt_float(name: str, default: float) -> float:
+    while True:
+        raw = input(f"{name} [{default:.2f}]: ").strip()
+        if not raw:
+            return float(default)
+        try:
+            return float(raw)
+        except ValueError:
+            print("Please enter a number.")
+
+
+def prompt_category(name: str, choices: list[str], default: str) -> str:
+    choices_text = ", ".join(choices)
+    raw = input(f"{name} ({choices_text}) [{default}]: ").strip()
+    return raw if raw else default
+
+
+def collect_profile_from_console(X: pd.DataFrame) -> pd.DataFrame:
+    print("\nEnter one teen profile. Press Enter to use the dataset median/mode defaults.")
+    values = {}
+
+    numeric_features = X.select_dtypes(include=["int64", "float64", "int32", "float32"]).columns.tolist()
+    categorical_features = [col for col in X.columns if col not in numeric_features]
+
+    for col in numeric_features:
+        values[col] = prompt_float(col, X[col].median())
+
+    for col in categorical_features:
+        choices = sorted(X[col].dropna().astype(str).unique().tolist())
+        default = X[col].mode(dropna=True).iloc[0] if not X[col].mode(dropna=True).empty else choices[0]
+        values[col] = prompt_category(col, choices, str(default))
+
+    return pd.DataFrame([values], columns=X.columns)
+
+
+def print_dataset_overview(df: pd.DataFrame) -> None:
+    print("First 5 rows:")
+    print(df.head())
+    print("\nDataset shape:", df.shape)
+    print("\nColumns:", list(df.columns))
+    print("\nDepression label used:", "depression_label" in df.columns)
+    print("\nTarget distribution:")
+    print(df["mental_health_risk_level"].value_counts())
+    print("\nStress group distribution:")
+    print(df["stress_group"].value_counts())
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Teen mental health risk analysis and ML comparison."
+    )
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Ask for one person's lifestyle data and predict the risk level.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    df, existing_drop_cols = load_dataset()
+    print_dataset_overview(df)
+
+    missing_table = df.isnull().sum().sort_values(ascending=False)
+    missing_table.to_csv(RESULT_DIR / "missing_values.csv", encoding="utf-8-sig")
+
+    save_basic_visualizations(df)
+    save_practical_analysis(df)
+
+    result_df, best_model_name, best_model, X, _ = train_and_evaluate_models(df, existing_drop_cols)
+    print("\nModel accuracy:")
+    print(result_df)
+    print(f"\nBest model: {best_model_name}")
+
+    if args.interactive:
+        case_df = collect_profile_from_console(X)
+        profile_report = analyze_single_profile(best_model, case_df, df, best_model_name)
+        print("\n" + profile_report)
+        (RESULT_DIR / "user_prediction.txt").write_text(profile_report, encoding="utf-8")
+        case_df.to_csv(RESULT_DIR / "user_input_profile.csv", index=False, encoding="utf-8-sig")
+
+    print("\nDone. Results were saved in the results/ folder.")
+
+
 if __name__ == "__main__":
     main()
