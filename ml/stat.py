@@ -5,7 +5,9 @@ import sys
 import warnings
 from pathlib import Path
 
-RESULT_DIR = Path("results")
+BASE_DIR = Path(__file__).resolve().parent
+DATA_FILE = BASE_DIR / "Teen_Mental_Health_Dataset.csv"
+RESULT_DIR = BASE_DIR / "results"
 RESULT_DIR.mkdir(exist_ok=True)
 MPL_CONFIG_DIR = RESULT_DIR / ".matplotlib"
 MPL_CONFIG_DIR.mkdir(exist_ok=True)
@@ -24,27 +26,32 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    classification_report,
+    confusion_matrix,
+    f1_score,
+)
+from sklearn.dummy import DummyClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 
 warnings.filterwarnings("ignore")
 
-DATA_FILE = "Teen_Mental_Health_Dataset.csv"
 DROP_COLUMNS = ["depression_label"]
 LEVEL_COLUMNS = ["stress_level", "anxiety_level", "addiction_level"]
 RISK_ORDER = ["Low", "Medium", "High"]
 STRESS_ORDER = ["Low stress", "Medium stress", "High stress"]
+BASELINE_MODEL_NAME = "Dummy Baseline"
+SIGNAL_THRESHOLD = 0.10
 PROFILE_FEATURES = [
     "daily_social_media_hours",
     "sleep_hours",
     "screen_time_before_sleep",
     "academic_performance",
     "physical_activity",
-    "anxiety_level",
-    "addiction_level",
-    "mental_health_risk_score",
 ]
 
 
@@ -100,7 +107,7 @@ def make_one_hot_encoder() -> OneHotEncoder:
 
 
 def load_dataset() -> tuple[pd.DataFrame, list[str]]:
-    if not os.path.exists(DATA_FILE):
+    if not DATA_FILE.exists():
         raise FileNotFoundError(
             f"{DATA_FILE} was not found. Put the dataset in the same folder as this script."
         )
@@ -335,6 +342,11 @@ def build_preprocessor(numeric_features: list[str], categorical_features: list[s
 
 def build_models(numeric_features: list[str], categorical_features: list[str]) -> dict[str, Pipeline]:
     return {
+        BASELINE_MODEL_NAME: Pipeline(
+            steps=[
+                ("model", DummyClassifier(strategy="most_frequent")),
+            ]
+        ),
         "Naive Bayes": Pipeline(
             steps=[
                 ("preprocess", build_preprocessor(numeric_features, categorical_features)),
@@ -350,7 +362,7 @@ def build_models(numeric_features: list[str], categorical_features: list[str]) -
         "Logistic Regression": Pipeline(
             steps=[
                 ("preprocess", build_preprocessor(numeric_features, categorical_features)),
-                ("model", LogisticRegression(max_iter=1000, random_state=42)),
+                ("model", LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)),
             ]
         ),
     }
@@ -401,7 +413,8 @@ def train_and_evaluate_models(
     rows = []
     fitted_models = {}
     best_model_name = None
-    best_accuracy = -1
+    best_selection_score = (-1.0, -1.0, -1.0)
+    baseline_macro_f1 = None
 
     with open(RESULT_DIR / "model_results.txt", "w", encoding="utf-8") as f:
         f.write("Teen Mental Health ML Project Results\n")
@@ -413,6 +426,8 @@ def train_and_evaluate_models(
         f.write("Target creation: mean(stress_level, anxiety_level, addiction_level) => Low/Medium/High\n")
         f.write(f"Input numeric features: {numeric_features}\n")
         f.write(f"Input categorical features: {categorical_features}\n\n")
+        f.write("Selection metric: Macro F1, with Balanced Accuracy and Accuracy as tie-breakers.\n")
+        f.write("Dummy Baseline predicts the most frequent class and is used only for comparison.\n\n")
         f.write("Target distribution:\n")
         f.write(str(y.value_counts()))
         f.write("\n\n")
@@ -425,25 +440,61 @@ def train_and_evaluate_models(
 
             pred = model.predict(X_test)
             acc = accuracy_score(y_test, pred)
-            rows.append({"Model": name, "Accuracy": round(acc, 4)})
+            balanced_acc = balanced_accuracy_score(y_test, pred)
+            macro_f1 = f1_score(y_test, pred, average="macro", zero_division=0)
+            weighted_f1 = f1_score(y_test, pred, average="weighted", zero_division=0)
+            is_baseline = name == BASELINE_MODEL_NAME
+            rows.append(
+                {
+                    "Model": name,
+                    "Accuracy": round(acc, 4),
+                    "Balanced Accuracy": round(balanced_acc, 4),
+                    "Macro F1": round(macro_f1, 4),
+                    "Weighted F1": round(weighted_f1, 4),
+                    "Baseline": is_baseline,
+                }
+            )
+
+            if is_baseline:
+                baseline_macro_f1 = macro_f1
 
             f.write(f"\n{name}\n")
             f.write("-" * len(name) + "\n")
             f.write(f"Accuracy: {acc:.4f}\n")
+            f.write(f"Balanced accuracy: {balanced_acc:.4f}\n")
+            f.write(f"Macro F1: {macro_f1:.4f}\n")
+            f.write(f"Weighted F1: {weighted_f1:.4f}\n")
             f.write("Classification report:\n")
-            f.write(classification_report(y_test, pred, zero_division=0))
+            f.write(classification_report(y_test, pred, labels=RISK_ORDER, zero_division=0))
             f.write("\nConfusion matrix:\n")
             f.write(str(confusion_matrix(y_test, pred, labels=RISK_ORDER)))
             f.write("\n")
 
-            if acc > best_accuracy:
-                best_accuracy = acc
+            selection_score = (macro_f1, balanced_acc, acc)
+            if not is_baseline and selection_score > best_selection_score:
+                best_selection_score = selection_score
                 best_model_name = name
 
-        f.write(f"\nBest model: {best_model_name}, Accuracy: {best_accuracy:.4f}\n")
+        f.write(
+            f"\nBest non-baseline model: {best_model_name}, "
+            f"Macro F1: {best_selection_score[0]:.4f}, "
+            f"Balanced Accuracy: {best_selection_score[1]:.4f}, "
+            f"Accuracy: {best_selection_score[2]:.4f}\n"
+        )
+        if baseline_macro_f1 is not None:
+            f.write(f"Dummy Baseline Macro F1: {baseline_macro_f1:.4f}\n")
+            if best_selection_score[0] <= baseline_macro_f1 + 0.01:
+                f.write(
+                    "Warning: the best model is not meaningfully better than the baseline. "
+                    "Use predictions cautiously.\n"
+                )
 
-    result_df = pd.DataFrame(rows).sort_values("Accuracy", ascending=False)
+    result_df = pd.DataFrame(rows).sort_values(
+        ["Baseline", "Macro F1", "Balanced Accuracy", "Accuracy"],
+        ascending=[True, False, False, False],
+    )
     result_df.to_csv(RESULT_DIR / "accuracy_comparison.csv", index=False, encoding="utf-8-sig")
+    result_df.to_csv(RESULT_DIR / "model_metric_comparison.csv", index=False, encoding="utf-8-sig")
 
     plt.figure(figsize=(8, 5))
     plt.bar(result_df["Model"], result_df["Accuracy"])
@@ -454,6 +505,17 @@ def train_and_evaluate_models(
     plt.xticks(rotation=20)
     plt.tight_layout()
     plt.savefig(RESULT_DIR / "accuracy_comparison.png", dpi=200)
+    plt.close()
+
+    plt.figure(figsize=(8, 5))
+    plt.bar(result_df["Model"], result_df["Macro F1"])
+    plt.title("Model Macro F1 Comparison")
+    plt.xlabel("Model")
+    plt.ylabel("Macro F1")
+    plt.ylim(0, 1)
+    plt.xticks(rotation=20)
+    plt.tight_layout()
+    plt.savefig(RESULT_DIR / "model_macro_f1_comparison.png", dpi=200)
     plt.close()
 
     return result_df, best_model_name, fitted_models[best_model_name], X, y
@@ -469,14 +531,29 @@ def describe_value_against_dataset(
     if pd.isna(value):
         return f"- {label}: no value was entered."
 
-    direction = "higher" if value > overall_mean else "lower"
-    comparison = f"{direction} than dataset average ({overall_mean:.2f})"
+    overall_gap = value - overall_mean
+    if abs(overall_gap) < SIGNAL_THRESHOLD:
+        comparison = f"similar to dataset average ({overall_mean:.2f})"
+    else:
+        direction = "higher" if overall_gap > 0 else "lower"
+        comparison = f"{direction} than dataset average ({overall_mean:.2f})"
+
     high_gap = value - high_stress_mean
 
     if higher_is_riskier:
-        signal = "risk-increasing signal" if value > high_stress_mean else "not above the high-stress average"
+        if high_gap > SIGNAL_THRESHOLD:
+            signal = "risk-increasing signal"
+        elif high_gap < -SIGNAL_THRESHOLD:
+            signal = "below the high-stress average"
+        else:
+            signal = "similar to the high-stress average"
     else:
-        signal = "risk-increasing signal" if value < high_stress_mean else "not below the high-stress average"
+        if high_gap < -SIGNAL_THRESHOLD:
+            signal = "risk-increasing signal"
+        elif high_gap > SIGNAL_THRESHOLD:
+            signal = "above the high-stress average"
+        else:
+            signal = "similar to the high-stress average"
 
     return (
         f"- {label}: {value:.2f}, {comparison}; "
@@ -489,6 +566,8 @@ def analyze_single_profile(
     case_df: pd.DataFrame,
     training_df: pd.DataFrame,
     model_name: str,
+    model_metrics: pd.Series | None = None,
+    baseline_macro_f1: float | None = None,
 ) -> str:
     prediction = model.predict(case_df)[0]
     lines = [
@@ -497,6 +576,20 @@ def analyze_single_profile(
         f"Model used: {model_name}",
         f"Predicted mental health risk level: {prediction}",
     ]
+
+    if model_metrics is not None:
+        macro_f1 = float(model_metrics["Macro F1"])
+        balanced_acc = float(model_metrics["Balanced Accuracy"])
+        lines.append(f"Model Macro F1 on test data: {macro_f1:.4f}")
+        lines.append(f"Model Balanced Accuracy on test data: {balanced_acc:.4f}")
+        if baseline_macro_f1 is not None and macro_f1 <= baseline_macro_f1 + 0.01:
+            lines.append(
+                "Caution: this model is close to the baseline, so this prediction should be interpreted carefully."
+            )
+        elif macro_f1 < 0.40:
+            lines.append(
+                "Caution: this model has weak class-balanced performance, so this prediction is only a rough estimate."
+            )
 
     if hasattr(model, "predict_proba"):
         probabilities = model.predict_proba(case_df)[0]
@@ -545,21 +638,46 @@ def analyze_single_profile(
     return "\n".join(lines)
 
 
-def prompt_float(name: str, default: float) -> float:
+def prompt_float(
+    name: str,
+    default: float,
+    min_value: float | None = None,
+    max_value: float | None = None,
+) -> float:
+    range_text = ""
+    if min_value is not None and max_value is not None:
+        range_text = f", range {min_value:.2f}-{max_value:.2f}"
+
     while True:
-        raw = input(f"{name} [{default:.2f}]: ").strip()
+        raw = input(f"{name} [{default:.2f}{range_text}]: ").strip()
         if not raw:
             return float(default)
         try:
-            return float(raw)
+            value = float(raw)
         except ValueError:
             print("Please enter a number.")
+            continue
+
+        if min_value is not None and value < min_value:
+            print(f"Please enter a value >= {min_value:.2f}.")
+            continue
+        if max_value is not None and value > max_value:
+            print(f"Please enter a value <= {max_value:.2f}.")
+            continue
+        return value
 
 
 def prompt_category(name: str, choices: list[str], default: str) -> str:
     choices_text = ", ".join(choices)
-    raw = input(f"{name} ({choices_text}) [{default}]: ").strip()
-    return raw if raw else default
+    normalized_choices = {choice.lower(): choice for choice in choices}
+
+    while True:
+        raw = input(f"{name} ({choices_text}) [{default}]: ").strip()
+        if not raw:
+            return default
+        if raw.lower() in normalized_choices:
+            return normalized_choices[raw.lower()]
+        print("Please choose one of the listed values.")
 
 
 def collect_profile_from_console(X: pd.DataFrame) -> pd.DataFrame:
@@ -570,7 +688,7 @@ def collect_profile_from_console(X: pd.DataFrame) -> pd.DataFrame:
     categorical_features = [col for col in X.columns if col not in numeric_features]
 
     for col in numeric_features:
-        values[col] = prompt_float(col, X[col].median())
+        values[col] = prompt_float(col, X[col].median(), X[col].min(), X[col].max())
 
     for col in categorical_features:
         choices = sorted(X[col].dropna().astype(str).unique().tolist())
@@ -617,13 +735,23 @@ def main() -> None:
     save_practical_analysis(df)
 
     result_df, best_model_name, best_model, X, _ = train_and_evaluate_models(df, existing_drop_cols)
-    print("\nModel accuracy:")
+    print("\nModel metrics:")
     print(result_df)
     print(f"\nBest model: {best_model_name}")
 
     if args.interactive:
         case_df = collect_profile_from_console(X)
-        profile_report = analyze_single_profile(best_model, case_df, df, best_model_name)
+        best_metrics = result_df[result_df["Model"] == best_model_name].iloc[0]
+        baseline_rows = result_df[result_df["Model"] == BASELINE_MODEL_NAME]
+        baseline_macro_f1 = None if baseline_rows.empty else float(baseline_rows.iloc[0]["Macro F1"])
+        profile_report = analyze_single_profile(
+            best_model,
+            case_df,
+            df,
+            best_model_name,
+            model_metrics=best_metrics,
+            baseline_macro_f1=baseline_macro_f1,
+        )
         print("\n" + profile_report)
         (RESULT_DIR / "user_prediction.txt").write_text(profile_report, encoding="utf-8")
         case_df.to_csv(RESULT_DIR / "user_input_profile.csv", index=False, encoding="utf-8-sig")

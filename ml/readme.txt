@@ -14,12 +14,17 @@ High   = 7.00 - 10.00
 Run the full analysis:
 python stat.py
 
+From the project root, you can also run:
+python ml\stat.py
+
 Run the interactive single-profile analysis:
 python stat.py --interactive
 
 Main outputs in results/:
 - model_results.txt
 - accuracy_comparison.csv / accuracy_comparison.png
+- model_metric_comparison.csv
+- model_macro_f1_comparison.png
 - practical_insights.txt
 - risk_level_profile.csv
 - stress_group_profile.csv
@@ -27,6 +32,10 @@ Main outputs in results/:
 - social_media_by_stress_level.csv / .png
 - decision_tree_feature_importance.csv / .png
 - user_prediction.txt, only after --interactive
+
+Model selection:
+The script compares models against a Dummy Baseline and chooses the best non-baseline model by Macro F1.
+Macro F1 is used because plain accuracy can be misleading when one class is much more common.
 
 Important:
 This project is for educational statistical and machine learning analysis.
