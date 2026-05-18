@@ -1,27 +1,42 @@
-# Teen Mental Health ML Project
+# Өсвөр үеийнхний сэтгэцийн эрүүл мэндийн ML төсөл
 
-This project analyzes teen mental health risk using social media usage and lifestyle features.
+Энэ төсөл нь өсвөр үеийнхний сошиал медиа хэрэглээ болон амьдралын хэв маягийн үзүүлэлтүүдээр сэтгэцийн эрүүл мэндийн эрсдэлийг `Low`, `Medium`, `High` гэж ангилах машин сургалтын жишээ төсөл юм.
 
-## Run
+## Ажиллуулах
+
+Төслийн үндсэн хавтаснаас:
 
 ```powershell
 python ml\stat.py
 ```
 
-You can also run it from inside the `ml` folder with `python stat.py`.
+Эсвэл `ml` хавтас руу орж:
 
-## Interactive prediction
+```powershell
+python stat.py
+```
+
+## Нэг хүний мэдээлэл оруулж шинжилгээ хийх
 
 ```powershell
 python ml\stat.py --interactive
 ```
 
-The interactive mode asks for one person's age, social media usage, sleep, screen time, activity, platform, and social interaction level. It predicts Low/Medium/High risk and compares the entered profile with dataset averages and high-stress group averages.
+Энэ горим нь нас, сошиал медиа ашигласан цаг, унтах цаг, унтахын өмнөх дэлгэцийн цаг, хөдөлгөөн, платформ, нийгмийн харилцааны түвшин зэрэг мэдээллийг асуугаад тухайн хүний эрсдэлийн ангиллыг таамаглана.
 
-## Outputs
+## Үр дүн
 
-Results are saved in `ml/results/`, including model metrics, practical insight summaries, high-stress platform analysis, lifestyle charts, and feature importance.
+Бүх үр дүн `ml/results/` хавтаст хадгалагдана. Гол файлууд:
 
-The model comparison includes a dummy baseline and selects the best non-baseline model by Macro F1 instead of plain accuracy. This is important because the dataset has more `Medium` labels than `Low` or `High`, so accuracy alone can be misleading.
+- `model_results.txt` - загваруудын дэлгэрэнгүй metric
+- `accuracy_comparison.csv` - Accuracy, Balanced Accuracy, Macro F1 харьцуулалт
+- `practical_insights.txt` - стресс өндөр бүлгийн практик тайлбар
+- `platform_stress_summary.csv` - платформ бүрийн стрессийн харьцуулалт
+- `social_media_by_stress_level.csv/.png` - стресс ба сошиал хэрэглээний хамаарал
+- `user_prediction.txt` - interactive горимын таамаглал
 
-This is an educational machine learning project, not a medical diagnosis tool.
+## Анхаарах зүйл
+
+Загвар сонгохдоо энгийн accuracy биш `Macro F1`-ийг гол metric болгосон. Учир нь dataset дээр `Medium` ангилал олон байгаа тул model бүх мөрийг `Medium` гэж таамаглахад accuracy өндөр мэт харагдаж болно.
+
+Энэ төсөл нь сургалтын зориулалттай статистик болон машин сургалтын шинжилгээ юм. Эмнэлзүйн онош тавих хэрэгсэл биш.

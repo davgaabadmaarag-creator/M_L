@@ -1,26 +1,27 @@
-Teen Mental Health ML Project
+Өсвөр үеийнхний сэтгэцийн эрүүл мэндийн ML төсөл
 
-Goal:
-Predict teen mental health risk level from social media usage and lifestyle features.
+Зорилго:
+Өсвөр үеийнхний сошиал медиа хэрэглээ болон амьдралын хэв маягийн үзүүлэлтүүдээр
+сэтгэцийн эрүүл мэндийн эрсдэлийг Low / Medium / High гэж ангилах.
 
-Target:
+Target үүсгэх арга:
 mental_health_risk_score = mean(stress_level, anxiety_level, addiction_level)
 
-Risk labels:
-Low    = 1.00 - 3.99
-Medium = 4.00 - 6.99
-High   = 7.00 - 10.00
+Эрсдэлийн ангилал:
+Low    = 1.00 - 3.99  буюу бага эрсдэл
+Medium = 4.00 - 6.99  буюу дунд эрсдэл
+High   = 7.00 - 10.00 буюу өндөр эрсдэл
 
-Run the full analysis:
+Бүх шинжилгээг ажиллуулах:
 python stat.py
 
-From the project root, you can also run:
+Төслийн үндсэн хавтаснаас ажиллуулах:
 python ml\stat.py
 
-Run the interactive single-profile analysis:
+Нэг хүний мэдээлэл оруулж таамаглал хийх:
 python stat.py --interactive
 
-Main outputs in results/:
+results/ хавтаст гарах гол файлууд:
 - model_results.txt
 - accuracy_comparison.csv / accuracy_comparison.png
 - model_metric_comparison.csv
@@ -31,12 +32,12 @@ Main outputs in results/:
 - platform_stress_summary.csv
 - social_media_by_stress_level.csv / .png
 - decision_tree_feature_importance.csv / .png
-- user_prediction.txt, only after --interactive
+- user_prediction.txt, зөвхөн --interactive ажиллуулсны дараа
 
-Model selection:
-The script compares models against a Dummy Baseline and chooses the best non-baseline model by Macro F1.
-Macro F1 is used because plain accuracy can be misleading when one class is much more common.
+Загвар сонгох логик:
+Скрипт нь Dummy Baseline-тай харьцуулж, baseline биш хамгийн сайн загварыг Macro F1 metric-ээр сонгоно.
+Macro F1 ашиглаж байгаа шалтгаан нь нэг ангилал хэт олон үед энгийн accuracy буруу ойлголт өгч болдог.
 
-Important:
-This project is for educational statistical and machine learning analysis.
-It must not be used as a clinical diagnosis.
+Анхаарах зүйл:
+Энэ төсөл нь сургалтын зориулалттай өгөгдлийн шинжилгээ, машин сургалтын жишээ юм.
+Эмнэлзүйн онош тавих хэрэгсэл биш.

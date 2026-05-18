@@ -1,0 +1,111 @@
+Өсвөр үеийнхний сэтгэцийн эрүүл мэндийн ML төслийн үр дүн
+depression_label баганыг ашиглаагүй, бүрэн хассан.
+=======================================================
+Боловсруулалтын дараах dataset-ийн хэмжээ: (1200, 15)
+Хассан баганууд: ['depression_label']
+Target багана: mental_health_risk_level
+Target үүсгэх арга: mean(stress_level, anxiety_level, addiction_level) => Low/Medium/High
+Model-д орсон тоон feature-үүд: ['нас', 'өдөрт сошиал медиа ашигласан цаг', 'өдөрт унтдаг цаг', 'унтахын өмнөх дэлгэцийн цаг', 'сурлагын үзүүлэлт', 'биеийн хөдөлгөөн']
+Model-д орсон категори feature-үүд: ['хүйс', 'ашигладаг платформ', 'нийгмийн харилцааны түвшин']
+
+Загвар сонгох гол metric: Macro F1. Тэнцсэн үед Balanced Accuracy, Accuracy-г харна.
+Dummy Baseline нь хамгийн олон давтагдсан ангиллыг таамагладаг бөгөөд зөвхөн харьцуулалтын суурь юм.
+
+Target-ийн тархалт:
+mental_health_risk_level
+Medium    714
+High      284
+Low       202
+Name: count, dtype: int64
+
+
+Dummy Baseline
+--------------
+Accuracy: 0.5958
+Balanced accuracy: 0.3333
+Macro F1: 0.2489
+Weighted F1: 0.4449
+Ангиллын дэлгэрэнгүй тайлан:
+              precision    recall  f1-score   support
+
+         Low       0.00      0.00      0.00        40
+      Medium       0.60      1.00      0.75       143
+        High       0.00      0.00      0.00        57
+
+    accuracy                           0.60       240
+   macro avg       0.20      0.33      0.25       240
+weighted avg       0.36      0.60      0.44       240
+
+Confusion matrix буюу андуурлын матриц:
+[[  0  40   0]
+ [  0 143   0]
+ [  0  57   0]]
+
+Naive Bayes
+-----------
+Accuracy: 0.5958
+Balanced accuracy: 0.3333
+Macro F1: 0.2489
+Weighted F1: 0.4449
+Ангиллын дэлгэрэнгүй тайлан:
+              precision    recall  f1-score   support
+
+         Low       0.00      0.00      0.00        40
+      Medium       0.60      1.00      0.75       143
+        High       0.00      0.00      0.00        57
+
+    accuracy                           0.60       240
+   macro avg       0.20      0.33      0.25       240
+weighted avg       0.36      0.60      0.44       240
+
+Confusion matrix буюу андуурлын матриц:
+[[  0  40   0]
+ [  0 143   0]
+ [  0  57   0]]
+
+Decision Tree
+-------------
+Accuracy: 0.5708
+Balanced accuracy: 0.3264
+Macro F1: 0.2654
+Weighted F1: 0.4527
+Ангиллын дэлгэрэнгүй тайлан:
+              precision    recall  f1-score   support
+
+         Low       0.00      0.00      0.00        40
+      Medium       0.60      0.94      0.74       143
+        High       0.22      0.04      0.06        57
+
+    accuracy                           0.57       240
+   macro avg       0.27      0.33      0.27       240
+weighted avg       0.41      0.57      0.45       240
+
+Confusion matrix буюу андуурлын матриц:
+[[  0  37   3]
+ [  4 135   4]
+ [  3  52   2]]
+
+Logistic Regression
+-------------------
+Accuracy: 0.3792
+Balanced accuracy: 0.3715
+Macro F1: 0.3466
+Weighted F1: 0.4014
+Ангиллын дэлгэрэнгүй тайлан:
+              precision    recall  f1-score   support
+
+         Low       0.21      0.40      0.27        40
+      Medium       0.62      0.40      0.49       143
+        High       0.25      0.32      0.28        57
+
+    accuracy                           0.38       240
+   macro avg       0.36      0.37      0.35       240
+weighted avg       0.46      0.38      0.40       240
+
+Confusion matrix буюу андуурлын матриц:
+[[16 14 10]
+ [43 57 43]
+ [18 21 18]]
+
+Хамгийн сайн non-baseline загвар: Logistic Regression, Macro F1: 0.3466, Balanced Accuracy: 0.3715, Accuracy: 0.3792
+Dummy Baseline Macro F1: 0.2489

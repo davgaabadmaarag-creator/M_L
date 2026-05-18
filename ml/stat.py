@@ -46,7 +46,31 @@ RISK_ORDER = ["Low", "Medium", "High"]
 STRESS_ORDER = ["Low stress", "Medium stress", "High stress"]
 BASELINE_MODEL_NAME = "Dummy Baseline"
 SIGNAL_THRESHOLD = 0.10
+RISK_LABELS_MN = {
+    "Low": "Бага",
+    "Medium": "Дунд",
+    "High": "Өндөр",
+}
+FEATURE_LABELS_MN = {
+    "age": "нас",
+    "gender": "хүйс",
+    "daily_social_media_hours": "өдөрт сошиал медиа ашигласан цаг",
+    "platform_usage": "ашигладаг платформ",
+    "sleep_hours": "өдөрт унтдаг цаг",
+    "screen_time_before_sleep": "унтахын өмнөх дэлгэцийн цаг",
+    "academic_performance": "сурлагын үзүүлэлт",
+    "physical_activity": "биеийн хөдөлгөөн",
+    "social_interaction_level": "нийгмийн харилцааны түвшин",
+    "stress_level": "стрессийн түвшин",
+    "anxiety_level": "түгшүүрийн түвшин",
+    "addiction_level": "донтох хандлагын түвшин",
+    "mental_health_risk_score": "сэтгэцийн эрүүл мэндийн эрсдэлийн оноо",
+    "mental_health_risk_level": "сэтгэцийн эрүүл мэндийн эрсдэлийн ангилал",
+    "stress_group": "стрессийн бүлэг",
+}
 PROFILE_FEATURES = [
+    # Практик тайлбар дээр target-аас шууд үүссэн багана оруулахгүй.
+    # Ингэснээр "эрсдэл өндөр учраас эрсдэл өндөр" гэсэн давхар тайлбар гарахаас сэргийлнэ.
     "daily_social_media_hours",
     "sleep_hours",
     "screen_time_before_sleep",
@@ -56,17 +80,27 @@ PROFILE_FEATURES = [
 
 
 def clean_col(name: str) -> str:
-    """Convert column names to simple snake_case names."""
+    """Баганын нэрийг Python-д ашиглахад хялбар snake_case хэлбэрт оруулна."""
     name = name.strip().lower()
     name = re.sub(r"[^a-z0-9]+", "_", name)
     return name.strip("_")
 
 
+def feature_label(col: str) -> str:
+    """Баганын нэрийг тайлан дээр уншихад ойлгомжтой Монгол нэр болгоно."""
+    return FEATURE_LABELS_MN.get(col, col)
+
+
+def risk_label(label: str) -> str:
+    """Low/Medium/High ангиллыг Монгол тайлбартай харуулна."""
+    return f"{RISK_LABELS_MN.get(label, label)} ({label})"
+
+
 def create_risk_level(df: pd.DataFrame) -> pd.DataFrame:
-    """Create Low/Medium/High risk labels from stress, anxiety, addiction."""
+    """Stress, anxiety, addiction онооноос Low/Medium/High target үүсгэнэ."""
     missing = [col for col in LEVEL_COLUMNS if col not in df.columns]
     if missing:
-        raise ValueError(f"Required columns are missing: {missing}")
+        raise ValueError(f"Target үүсгэхэд хэрэгтэй багана олдсонгүй: {missing}")
 
     df = df.copy()
     df["mental_health_risk_score"] = df[LEVEL_COLUMNS].mean(axis=1)
@@ -84,7 +118,7 @@ def create_risk_level(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_stress_group(df: pd.DataFrame) -> pd.DataFrame:
-    """Add an interpretable stress group for practical analysis."""
+    """Практик тайлбарт ашиглах стрессийн бүлэг нэмнэ."""
     df = df.copy()
     df["stress_group"] = pd.cut(
         df["stress_level"],
@@ -99,7 +133,7 @@ def add_stress_group(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def make_one_hot_encoder() -> OneHotEncoder:
-    """Support both old and new scikit-learn OneHotEncoder APIs."""
+    """scikit-learn-ийн хуучин/шинэ хувилбарын OneHotEncoder-ийг дэмжинэ."""
     try:
         return OneHotEncoder(handle_unknown="ignore", sparse_output=False)
     except TypeError:
@@ -109,7 +143,7 @@ def make_one_hot_encoder() -> OneHotEncoder:
 def load_dataset() -> tuple[pd.DataFrame, list[str]]:
     if not DATA_FILE.exists():
         raise FileNotFoundError(
-            f"{DATA_FILE} was not found. Put the dataset in the same folder as this script."
+            f"{DATA_FILE} олдсонгүй. Dataset-ээ stat.py файлтай нэг хавтаст байрлуулна уу."
         )
 
     df = pd.read_csv(DATA_FILE)
@@ -124,23 +158,23 @@ def load_dataset() -> tuple[pd.DataFrame, list[str]]:
 
 
 def save_basic_visualizations(df: pd.DataFrame) -> None:
-    """Save the basic EDA charts used in the report."""
+    """Тайланд ашиглах үндсэн EDA графикуудыг хадгална."""
     for col in LEVEL_COLUMNS:
         if col in df.columns:
             plt.figure(figsize=(7, 5))
             df[col].value_counts().sort_index().plot(kind="bar")
-            plt.title(f"Distribution of {col}")
-            plt.xlabel("Level (1-10)")
-            plt.ylabel("Count")
+            plt.title(f"{feature_label(col)}-ийн тархалт")
+            plt.xlabel("Түвшин (1-10)")
+            plt.ylabel("Тоо")
             plt.tight_layout()
             plt.savefig(RESULT_DIR / f"{col}_distribution.png", dpi=200)
             plt.close()
 
     plt.figure(figsize=(7, 5))
     df["mental_health_risk_level"].value_counts().reindex(RISK_ORDER).plot(kind="bar")
-    plt.title("Mental Health Risk Level Distribution")
-    plt.xlabel("Risk Level")
-    plt.ylabel("Count")
+    plt.title("Сэтгэцийн эрүүл мэндийн эрсдэлийн ангиллын тархалт")
+    plt.xlabel("Эрсдэлийн ангилал")
+    plt.ylabel("Тоо")
     plt.tight_layout()
     plt.savefig(RESULT_DIR / "mental_health_risk_distribution.png", dpi=200)
     plt.savefig(RESULT_DIR / "target_distribution.png", dpi=200)
@@ -153,9 +187,9 @@ def save_basic_visualizations(df: pd.DataFrame) -> None:
 
         plt.figure(figsize=(7, 5))
         platform_avg.plot(kind="bar")
-        plt.title("Average Risk Score by Platform")
-        plt.xlabel("Platform")
-        plt.ylabel("Average Risk Score")
+        plt.title("Платформ бүрийн дундаж эрсдэлийн оноо")
+        plt.xlabel("Платформ")
+        plt.ylabel("Дундаж эрсдэлийн оноо")
         plt.tight_layout()
         plt.savefig(RESULT_DIR / "average_risk_by_platform.png", dpi=200)
         plt.close()
@@ -170,7 +204,7 @@ def save_basic_visualizations(df: pd.DataFrame) -> None:
         plt.colorbar()
         plt.xticks(range(len(corr.columns)), corr.columns, rotation=90)
         plt.yticks(range(len(corr.columns)), corr.columns)
-        plt.title("Correlation Matrix")
+        plt.title("Корреляцийн матриц")
         plt.tight_layout()
         plt.savefig(RESULT_DIR / "correlation_matrix.png", dpi=200)
         plt.close()
@@ -181,7 +215,7 @@ def available_profile_features(df: pd.DataFrame) -> list[str]:
 
 
 def save_practical_analysis(df: pd.DataFrame) -> None:
-    """Create practical summaries such as high-stress behavior profiles."""
+    """Стресс өндөр хүмүүсийн хэрэглээний хэв маяг зэрэг практик тайлан үүсгэнэ."""
     profile_cols = available_profile_features(df)
     high_stress = df[df["stress_level"] >= 7]
     not_high_stress = df[df["stress_level"] < 7]
@@ -211,9 +245,9 @@ def save_practical_analysis(df: pd.DataFrame) -> None:
 
         plt.figure(figsize=(8, 5))
         platform_summary["high_stress_rate_pct"].plot(kind="bar")
-        plt.title("High Stress Rate by Platform")
-        plt.xlabel("Platform")
-        plt.ylabel("High stress rate (%)")
+        plt.title("Платформ бүрийн өндөр стрессийн хувь")
+        plt.xlabel("Платформ")
+        plt.ylabel("Өндөр стрессийн хувь (%)")
         plt.tight_layout()
         plt.savefig(RESULT_DIR / "high_stress_by_platform.png", dpi=200)
         plt.close()
@@ -223,9 +257,9 @@ def save_practical_analysis(df: pd.DataFrame) -> None:
 
     plt.figure(figsize=(8, 5))
     trend.plot(kind="line", marker="o")
-    plt.title("Average Social Media Hours by Stress Level")
-    plt.xlabel("Stress level")
-    plt.ylabel("Average daily social media hours")
+    plt.title("Стрессийн түвшин ба сошиал медиа хэрэглээ")
+    plt.xlabel("Стрессийн түвшин")
+    plt.ylabel("Өдөрт ашигласан дундаж цаг")
     plt.xticks(sorted(df["stress_level"].dropna().unique()))
     plt.tight_layout()
     plt.savefig(RESULT_DIR / "social_media_by_stress_level.png", dpi=200)
@@ -244,22 +278,22 @@ def save_practical_analysis(df: pd.DataFrame) -> None:
     if plot_cols:
         plt.figure(figsize=(9, 5))
         risk_profile[plot_cols].plot(kind="bar")
-        plt.title("Lifestyle Profile by Risk Level")
-        plt.xlabel("Risk level")
-        plt.ylabel("Average value")
+        plt.title("Эрсдэлийн ангилал бүрийн амьдралын хэв маяг")
+        plt.xlabel("Эрсдэлийн ангилал")
+        plt.ylabel("Дундаж утга")
         plt.xticks(rotation=0)
         plt.tight_layout()
         plt.savefig(RESULT_DIR / "risk_level_lifestyle_profile.png", dpi=200)
         plt.close()
 
     lines = [
-        "Practical Insights for Teen Mental Health ML Project",
+        "Практик шинжилгээний тайлан",
         "=" * 60,
-        f"Total rows after cleaning: {len(df)}",
-        f"High stress rows (stress_level >= 7): {len(high_stress)} "
+        f"Цэвэрлэсний дараах нийт мөрийн тоо: {len(df)}",
+        f"Стресс өндөр мөрүүд (stress_level >= 7): {len(high_stress)} "
         f"({len(high_stress) / len(df) * 100:.1f}%)",
         "",
-        "1. High stress group profile",
+        "1. Стресс өндөр бүлгийн дундаж үзүүлэлт",
         "-" * 30,
     ]
 
@@ -268,34 +302,35 @@ def save_practical_analysis(df: pd.DataFrame) -> None:
         other_mean = not_high_stress[col].mean()
         diff = high_mean - other_mean
         lines.append(
-            f"{col}: high stress avg={high_mean:.2f}, other avg={other_mean:.2f}, diff={diff:+.2f}"
+            f"{feature_label(col)}: стресс өндөр дундаж={high_mean:.2f}, "
+            f"бусад бүлгийн дундаж={other_mean:.2f}, зөрүү={diff:+.2f}"
         )
 
     if "platform_usage" in df.columns:
-        lines.extend(["", "2. Most common platforms among high-stress rows", "-" * 48])
+        lines.extend(["", "2. Стресс өндөр хүмүүсийн хамгийн түгээмэл платформ", "-" * 48])
         platform_share = high_stress["platform_usage"].value_counts(normalize=True).mul(100)
         for platform, pct in platform_share.items():
             lines.append(f"{platform}: {pct:.1f}%")
 
-        lines.extend(["", "3. Platform-level high stress rate", "-" * 36])
+        lines.extend(["", "3. Платформ бүрийн өндөр стрессийн хувь", "-" * 36])
         for platform, row in platform_summary.iterrows():
             lines.append(
-                f"{platform}: high_stress_rate={row['high_stress_rate_pct']:.1f}%, "
-                f"avg_social_hours={row['avg_social_media_hours']:.2f}, "
-                f"avg_sleep={row['avg_sleep_hours']:.2f}"
+                f"{platform}: өндөр стрессийн хувь={row['high_stress_rate_pct']:.1f}%, "
+                f"сошиал хэрэглээний дундаж цаг={row['avg_social_media_hours']:.2f}, "
+                f"унтах дундаж цаг={row['avg_sleep_hours']:.2f}"
             )
 
     lines.extend(
         [
             "",
-            "4. How to use these findings",
+            "4. Энэ үр дүнг хэрхэн тайлбарлах вэ?",
             "-" * 30,
-            "Use this section to explain practical patterns, for example:",
-            "- People in the high-stress group can be compared with other groups by social media hours.",
-            "- Platform summaries show where high stress rates are relatively higher in this dataset.",
-            "- Sleep hours, screen time before sleep, and physical activity help explain lifestyle differences.",
+            "Энэ хэсгийг хамгаалалт/тайланд дараах байдлаар тайлбарлаж болно:",
+            "- Стресс өндөр бүлгийг бусад бүлэгтэй сошиал медиа хэрэглээний цагаар харьцуулж болно.",
+            "- Платформын хүснэгт нь энэ dataset дээр аль платформд өндөр стрессийн хувь арай их байгааг харуулна.",
+            "- Унтах цаг, унтахын өмнөх дэлгэцийн цаг, биеийн хөдөлгөөн нь амьдралын хэв маягийн ялгааг тайлбарлахад тусална.",
             "",
-            "Important: These results are educational and data-driven. They are not a clinical diagnosis.",
+            "Анхаарах зүйл: Энэ нь сургалтын зориулалттай өгөгдлийн шинжилгээ бөгөөд эмнэлзүйн онош биш.",
         ]
     )
 
@@ -304,6 +339,7 @@ def save_practical_analysis(df: pd.DataFrame) -> None:
 
 def split_features_target(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, list[str], list[str]]:
     target_col = "mental_health_risk_level"
+    # Target leakage-ээс сэргийлж target үүсгэхэд орсон stress/anxiety/addiction багануудыг input-оос хасна.
     feature_drop_cols = [target_col, "mental_health_risk_score", "stress_group"] + LEVEL_COLUMNS
     X = df.drop(columns=[col for col in feature_drop_cols if col in df.columns])
     y = df[target_col]
@@ -369,7 +405,7 @@ def build_models(numeric_features: list[str], categorical_features: list[str]) -
 
 
 def save_decision_tree_feature_importance(model: Pipeline) -> None:
-    """Save the most useful explanatory output from the Decision Tree model."""
+    """Decision Tree загварын аль feature чухал байсныг хадгална."""
     try:
         preprocessor = model.named_steps["preprocess"]
         tree = model.named_steps["model"]
@@ -391,8 +427,8 @@ def save_decision_tree_feature_importance(model: Pipeline) -> None:
     if not top_features.empty:
         plt.figure(figsize=(8, 5))
         plt.barh(top_features["feature"], top_features["importance"])
-        plt.title("Top Decision Tree Feature Importance")
-        plt.xlabel("Importance")
+        plt.title("Decision Tree загварын хамгийн чухал feature-үүд")
+        plt.xlabel("Чухлын хэмжээ")
         plt.tight_layout()
         plt.savefig(RESULT_DIR / "decision_tree_feature_importance.png", dpi=200)
         plt.close()
@@ -417,18 +453,18 @@ def train_and_evaluate_models(
     baseline_macro_f1 = None
 
     with open(RESULT_DIR / "model_results.txt", "w", encoding="utf-8") as f:
-        f.write("Teen Mental Health ML Project Results\n")
-        f.write("Depression label was removed and not used.\n")
+        f.write("Өсвөр үеийнхний сэтгэцийн эрүүл мэндийн ML төслийн үр дүн\n")
+        f.write("depression_label баганыг ашиглаагүй, бүрэн хассан.\n")
         f.write("=" * 55 + "\n")
-        f.write(f"Dataset shape after processing: {df.shape}\n")
-        f.write(f"Removed columns: {existing_drop_cols}\n")
-        f.write("Target column: mental_health_risk_level\n")
-        f.write("Target creation: mean(stress_level, anxiety_level, addiction_level) => Low/Medium/High\n")
-        f.write(f"Input numeric features: {numeric_features}\n")
-        f.write(f"Input categorical features: {categorical_features}\n\n")
-        f.write("Selection metric: Macro F1, with Balanced Accuracy and Accuracy as tie-breakers.\n")
-        f.write("Dummy Baseline predicts the most frequent class and is used only for comparison.\n\n")
-        f.write("Target distribution:\n")
+        f.write(f"Боловсруулалтын дараах dataset-ийн хэмжээ: {df.shape}\n")
+        f.write(f"Хассан баганууд: {existing_drop_cols}\n")
+        f.write("Target багана: mental_health_risk_level\n")
+        f.write("Target үүсгэх арга: mean(stress_level, anxiety_level, addiction_level) => Low/Medium/High\n")
+        f.write(f"Model-д орсон тоон feature-үүд: {[feature_label(c) for c in numeric_features]}\n")
+        f.write(f"Model-д орсон категори feature-үүд: {[feature_label(c) for c in categorical_features]}\n\n")
+        f.write("Загвар сонгох гол metric: Macro F1. Тэнцсэн үед Balanced Accuracy, Accuracy-г харна.\n")
+        f.write("Dummy Baseline нь хамгийн олон давтагдсан ангиллыг таамагладаг бөгөөд зөвхөн харьцуулалтын суурь юм.\n\n")
+        f.write("Target-ийн тархалт:\n")
         f.write(str(y.value_counts()))
         f.write("\n\n")
 
@@ -464,19 +500,20 @@ def train_and_evaluate_models(
             f.write(f"Balanced accuracy: {balanced_acc:.4f}\n")
             f.write(f"Macro F1: {macro_f1:.4f}\n")
             f.write(f"Weighted F1: {weighted_f1:.4f}\n")
-            f.write("Classification report:\n")
+            f.write("Ангиллын дэлгэрэнгүй тайлан:\n")
             f.write(classification_report(y_test, pred, labels=RISK_ORDER, zero_division=0))
-            f.write("\nConfusion matrix:\n")
+            f.write("\nConfusion matrix буюу андуурлын матриц:\n")
             f.write(str(confusion_matrix(y_test, pred, labels=RISK_ORDER)))
             f.write("\n")
 
+            # Accuracy дангаараа буруу ойлголт өгч болох тул Macro F1-ийг эхэлж харна.
             selection_score = (macro_f1, balanced_acc, acc)
             if not is_baseline and selection_score > best_selection_score:
                 best_selection_score = selection_score
                 best_model_name = name
 
         f.write(
-            f"\nBest non-baseline model: {best_model_name}, "
+            f"\nХамгийн сайн non-baseline загвар: {best_model_name}, "
             f"Macro F1: {best_selection_score[0]:.4f}, "
             f"Balanced Accuracy: {best_selection_score[1]:.4f}, "
             f"Accuracy: {best_selection_score[2]:.4f}\n"
@@ -485,8 +522,8 @@ def train_and_evaluate_models(
             f.write(f"Dummy Baseline Macro F1: {baseline_macro_f1:.4f}\n")
             if best_selection_score[0] <= baseline_macro_f1 + 0.01:
                 f.write(
-                    "Warning: the best model is not meaningfully better than the baseline. "
-                    "Use predictions cautiously.\n"
+                    "Анхааруулга: хамгийн сайн загвар baseline-аас мэдэгдэхүйц дээр биш байна. "
+                    "Иймээс prediction-ийг болгоомжтой тайлбарлана.\n"
                 )
 
     result_df = pd.DataFrame(rows).sort_values(
@@ -498,8 +535,8 @@ def train_and_evaluate_models(
 
     plt.figure(figsize=(8, 5))
     plt.bar(result_df["Model"], result_df["Accuracy"])
-    plt.title("Model Accuracy Comparison")
-    plt.xlabel("Model")
+    plt.title("Загваруудын Accuracy харьцуулалт")
+    plt.xlabel("Загвар")
     plt.ylabel("Accuracy")
     plt.ylim(0, 1)
     plt.xticks(rotation=20)
@@ -509,8 +546,8 @@ def train_and_evaluate_models(
 
     plt.figure(figsize=(8, 5))
     plt.bar(result_df["Model"], result_df["Macro F1"])
-    plt.title("Model Macro F1 Comparison")
-    plt.xlabel("Model")
+    plt.title("Загваруудын Macro F1 харьцуулалт")
+    plt.xlabel("Загвар")
     plt.ylabel("Macro F1")
     plt.ylim(0, 1)
     plt.xticks(rotation=20)
@@ -529,35 +566,35 @@ def describe_value_against_dataset(
     higher_is_riskier: bool,
 ) -> str:
     if pd.isna(value):
-        return f"- {label}: no value was entered."
+        return f"- {label}: утга оруулаагүй байна."
 
     overall_gap = value - overall_mean
     if abs(overall_gap) < SIGNAL_THRESHOLD:
-        comparison = f"similar to dataset average ({overall_mean:.2f})"
+        comparison = f"dataset-ийн дундажтай ойролцоо ({overall_mean:.2f})"
     else:
-        direction = "higher" if overall_gap > 0 else "lower"
-        comparison = f"{direction} than dataset average ({overall_mean:.2f})"
+        direction = "өндөр" if overall_gap > 0 else "бага"
+        comparison = f"dataset-ийн дунджаас {direction} ({overall_mean:.2f})"
 
     high_gap = value - high_stress_mean
 
     if higher_is_riskier:
         if high_gap > SIGNAL_THRESHOLD:
-            signal = "risk-increasing signal"
+            signal = "эрсдэлийг нэмэгдүүлж болзошгүй дохио"
         elif high_gap < -SIGNAL_THRESHOLD:
-            signal = "below the high-stress average"
+            signal = "стресс өндөр бүлгийн дунджаас бага"
         else:
-            signal = "similar to the high-stress average"
+            signal = "стресс өндөр бүлгийн дундажтай ойролцоо"
     else:
         if high_gap < -SIGNAL_THRESHOLD:
-            signal = "risk-increasing signal"
+            signal = "эрсдэлийг нэмэгдүүлж болзошгүй дохио"
         elif high_gap > SIGNAL_THRESHOLD:
-            signal = "above the high-stress average"
+            signal = "стресс өндөр бүлгийн дунджаас өндөр"
         else:
-            signal = "similar to the high-stress average"
+            signal = "стресс өндөр бүлгийн дундажтай ойролцоо"
 
     return (
         f"- {label}: {value:.2f}, {comparison}; "
-        f"gap vs high-stress avg={high_gap:+.2f}; {signal}."
+        f"стресс өндөр бүлгийн дундажтай зөрүү={high_gap:+.2f}; {signal}."
     )
 
 
@@ -571,24 +608,24 @@ def analyze_single_profile(
 ) -> str:
     prediction = model.predict(case_df)[0]
     lines = [
-        "Single Profile Analysis",
+        "Нэг хүний мэдээлэл дээр хийсэн шинжилгээ",
         "=" * 30,
-        f"Model used: {model_name}",
-        f"Predicted mental health risk level: {prediction}",
+        f"Ашигласан загвар: {model_name}",
+        f"Таамагласан эрсдэлийн ангилал: {risk_label(prediction)}",
     ]
 
     if model_metrics is not None:
         macro_f1 = float(model_metrics["Macro F1"])
         balanced_acc = float(model_metrics["Balanced Accuracy"])
-        lines.append(f"Model Macro F1 on test data: {macro_f1:.4f}")
-        lines.append(f"Model Balanced Accuracy on test data: {balanced_acc:.4f}")
+        lines.append(f"Test өгөгдөл дээрх Macro F1: {macro_f1:.4f}")
+        lines.append(f"Test өгөгдөл дээрх Balanced Accuracy: {balanced_acc:.4f}")
         if baseline_macro_f1 is not None and macro_f1 <= baseline_macro_f1 + 0.01:
             lines.append(
-                "Caution: this model is close to the baseline, so this prediction should be interpreted carefully."
+                "Анхааруулга: энэ загвар baseline-тай ойролцоо тул prediction-ийг болгоомжтой тайлбарлана."
             )
         elif macro_f1 < 0.40:
             lines.append(
-                "Caution: this model has weak class-balanced performance, so this prediction is only a rough estimate."
+                "Анхааруулга: class бүрийг тэнцвэртэй таних чадвар сул тул энэ prediction нь зөвхөн ойролцоолсон үнэлгээ."
             )
 
     if hasattr(model, "predict_proba"):
@@ -598,19 +635,19 @@ def analyze_single_profile(
             key=lambda item: item[1],
             reverse=True,
         )
-        lines.append("Prediction probabilities:")
+        lines.append("Ангилал тус бүрийн магадлал:")
         for label, prob in proba_pairs:
-            lines.append(f"- {label}: {prob * 100:.1f}%")
+            lines.append(f"- {risk_label(label)}: {prob * 100:.1f}%")
 
     high_stress = training_df[training_df["stress_level"] >= 7]
-    lines.extend(["", "Lifestyle comparison with the dataset:"])
+    lines.extend(["", "Оруулсан мэдээллийг dataset-ийн дундажтай харьцуулсан нь:"])
 
     comparisons = [
-        ("daily_social_media_hours", "Daily social media hours", True),
-        ("sleep_hours", "Sleep hours", False),
-        ("screen_time_before_sleep", "Screen time before sleep", True),
-        ("physical_activity", "Physical activity", False),
-        ("academic_performance", "Academic performance", False),
+        ("daily_social_media_hours", "Өдөрт сошиал медиа ашигласан цаг", True),
+        ("sleep_hours", "Унтах цаг", False),
+        ("screen_time_before_sleep", "Унтахын өмнөх дэлгэцийн цаг", True),
+        ("physical_activity", "Биеийн хөдөлгөөн", False),
+        ("academic_performance", "Сурлагын үзүүлэлт", False),
     ]
 
     for col, label, higher_is_riskier in comparisons:
@@ -629,10 +666,10 @@ def analyze_single_profile(
     lines.extend(
         [
             "",
-            "Interpretation guide:",
-            "- Higher social media hours and more screen time before sleep can be discussed as possible risk signals.",
-            "- Lower sleep hours and lower physical activity can be discussed as lifestyle risk signals.",
-            "- This output is an educational ML estimate, not a medical diagnosis.",
+            "Тайлбарлах заавар:",
+            "- Сошиал медиа хэрэглээ болон унтахын өмнөх дэлгэцийн цаг өндөр байвал эрсдэлийн дохио байж болно.",
+            "- Унтах цаг болон биеийн хөдөлгөөн бага байвал амьдралын хэв маягийн эрсдэлийн дохио байж болно.",
+            "- Энэ үр дүн нь сургалтын зориулалттай ML үнэлгээ бөгөөд эмнэлзүйн онош биш.",
         ]
     )
     return "\n".join(lines)
@@ -655,14 +692,14 @@ def prompt_float(
         try:
             value = float(raw)
         except ValueError:
-            print("Please enter a number.")
+            print("Тоон утга оруулна уу.")
             continue
 
         if min_value is not None and value < min_value:
-            print(f"Please enter a value >= {min_value:.2f}.")
+            print(f"{min_value:.2f}-аас их буюу тэнцүү утга оруулна уу.")
             continue
         if max_value is not None and value > max_value:
-            print(f"Please enter a value <= {max_value:.2f}.")
+            print(f"{max_value:.2f}-аас бага буюу тэнцүү утга оруулна уу.")
             continue
         return value
 
@@ -677,11 +714,11 @@ def prompt_category(name: str, choices: list[str], default: str) -> str:
             return default
         if raw.lower() in normalized_choices:
             return normalized_choices[raw.lower()]
-        print("Please choose one of the listed values.")
+        print("Жагсаалтад байгаа утгуудаас сонгоно уу.")
 
 
 def collect_profile_from_console(X: pd.DataFrame) -> pd.DataFrame:
-    print("\nEnter one teen profile. Press Enter to use the dataset median/mode defaults.")
+    print("\nНэг хүний мэдээлэл оруулна уу. Enter дарвал dataset-ийн median/mode default утгыг ашиглана.")
     values = {}
 
     numeric_features = X.select_dtypes(include=["int64", "float64", "int32", "float32"]).columns.tolist()
@@ -699,25 +736,25 @@ def collect_profile_from_console(X: pd.DataFrame) -> pd.DataFrame:
 
 
 def print_dataset_overview(df: pd.DataFrame) -> None:
-    print("First 5 rows:")
+    print("Эхний 5 мөр:")
     print(df.head())
-    print("\nDataset shape:", df.shape)
-    print("\nColumns:", list(df.columns))
-    print("\nDepression label used:", "depression_label" in df.columns)
-    print("\nTarget distribution:")
+    print("\nDataset-ийн хэмжээ:", df.shape)
+    print("\nБаганын нэрс:", list(df.columns))
+    print("\ndepression_label ашигласан эсэх:", "depression_label" in df.columns)
+    print("\nTarget-ийн тархалт:")
     print(df["mental_health_risk_level"].value_counts())
-    print("\nStress group distribution:")
+    print("\nСтрессийн бүлгийн тархалт:")
     print(df["stress_group"].value_counts())
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Teen mental health risk analysis and ML comparison."
+        description="Өсвөр үеийнхний сэтгэцийн эрүүл мэндийн эрсдэлийн ML шинжилгээ."
     )
     parser.add_argument(
         "--interactive",
         action="store_true",
-        help="Ask for one person's lifestyle data and predict the risk level.",
+        help="Нэг хүний амьдралын хэв маягийн мэдээллийг асууж, эрсдэлийн ангиллыг таамаглана.",
     )
     return parser.parse_args()
 
@@ -735,9 +772,9 @@ def main() -> None:
     save_practical_analysis(df)
 
     result_df, best_model_name, best_model, X, _ = train_and_evaluate_models(df, existing_drop_cols)
-    print("\nModel metrics:")
+    print("\nЗагваруудын metric:")
     print(result_df)
-    print(f"\nBest model: {best_model_name}")
+    print(f"\nХамгийн сайн загвар: {best_model_name}")
 
     if args.interactive:
         case_df = collect_profile_from_console(X)
@@ -756,7 +793,7 @@ def main() -> None:
         (RESULT_DIR / "user_prediction.txt").write_text(profile_report, encoding="utf-8")
         case_df.to_csv(RESULT_DIR / "user_input_profile.csv", index=False, encoding="utf-8-sig")
 
-    print("\nDone. Results were saved in the results/ folder.")
+    print("\nДууслаа. Үр дүн results/ хавтаст хадгалагдлаа.")
 
 
 if __name__ == "__main__":
