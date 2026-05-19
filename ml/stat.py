@@ -598,6 +598,159 @@ def describe_value_against_dataset(
     )
 
 
+def score_single_profile(case_df: pd.DataFrame) -> tuple[int, str]:
+    """Zip app шиг 0-100 оноо тооцож, Low/Medium/High ангилал буцаана."""
+    row = case_df.iloc[0]
+
+    def value(col: str, default: float) -> float:
+        parsed = pd.to_numeric(row.get(col, default), errors="coerce")
+        return float(default) if pd.isna(parsed) else float(parsed)
+
+    daily = value("daily_social_media_hours", 4.5)
+    sleep = value("sleep_hours", 6.5)
+    before_sleep = value("screen_time_before_sleep", 1.7)
+    academic = value("academic_performance", 3.0)
+    physical = value("physical_activity", 1.0)
+    social = str(row.get("social_interaction_level", "medium")).lower()
+
+    score = 0.0
+    score += min(30, max(0, daily - 1) / 7 * 30)
+    score += min(20, max(0, before_sleep - 0.5) / 2.5 * 20)
+    score += min(20, max(0, 9 - sleep) / 5 * 20)
+    score += min(15, max(0, 2 - physical) / 2 * 15)
+    score += min(10, max(0, 4 - academic) / 2 * 10)
+    if social == "low":
+        score += 5
+    elif social == "medium":
+        score += 2
+
+    score_int = int(max(0, min(100, round(score))))
+    if score_int <= 34:
+        return score_int, "Low"
+    if score_int <= 66:
+        return score_int, "Medium"
+    return score_int, "High"
+
+
+def more_severe_label(first: str, second: str) -> str:
+    severity = {"Low": 0, "Medium": 1, "High": 2}
+    return first if severity.get(first, 0) >= severity.get(second, 0) else second
+
+
+def profile_explanation(label: str) -> str:
+    if label == "Low":
+        return (
+            "Одоогийн оруулсан үзүүлэлтүүд харьцангуй хэвийн түвшинд байна. "
+            "Гэхдээ унтахын өмнөх дэлгэцийн хэрэглээ, сошиал медиа ашиглах цагаа тогтмол хянаж хэвших нь сайн."
+        )
+    if label == "Medium":
+        return (
+            "Дэлгэц болон сошиал медиа хэрэглээ өдөр тутмын амьдралд нөлөөлж эхэлж байж магадгүй. "
+            "Унтахын өмнөх дэлгэцийн хэрэглээг багасгаж, өдөрт тогтмол хязгаар тавихыг зөвлөе."
+        )
+    return (
+        "Эрсдэл өндөр байх магадлалтай гэж таамаглагдлаа. "
+        "Сошиал медиа ашиглах цагаа багасгах төлөвлөгөө гаргаж, шаардлагатай бол багш, эцэг эх, зөвлөхтэй ярилцах нь зүйтэй."
+    )
+
+
+def make_single_profile_recommendations(case_df: pd.DataFrame, final_label: str) -> list[str]:
+    row = case_df.iloc[0]
+
+    def value(col: str, default: float) -> float:
+        parsed = pd.to_numeric(row.get(col, default), errors="coerce")
+        return float(default) if pd.isna(parsed) else float(parsed)
+
+    recs = []
+    if value("daily_social_media_hours", 0) >= 5:
+        recs.append("Өдөрт сошиал медиа ашиглах цагаа 30 минутаар аажмаар багасгаж эхэл.")
+    if value("screen_time_before_sleep", 0) >= 1:
+        recs.append("Унтахаас 30-60 минутын өмнө утас/компьютероо хол тавь.")
+    if value("sleep_hours", 9) < 7:
+        recs.append("Унтах цагийг 7-9 цагт ойртуулах төлөвлөгөө гарга.")
+    if value("physical_activity", 2) < 1:
+        recs.append("Өдөр бүр хамгийн багадаа 20-30 минут алхах эсвэл дасгал хийхийг зорь.")
+    if value("academic_performance", 4) < 2.8:
+        recs.append("Хичээл/даалгаврын цагийг богино блок болгон төлөвлөж, дэлгэцийн завсарлага тогтоож үз.")
+    if str(row.get("social_interaction_level", "medium")).lower() == "low":
+        recs.append("Өдөр бүр нэг бодит харилцаа нэмэхийг зорь: найз, гэр бүл, багштай богино яриа хийх гэх мэт.")
+    if final_label == "High":
+        recs.append("Апп бүр дээр daily limit тавьж, notification-оо багасга.")
+    if not recs:
+        recs.append("Одоогийн дадлаа хадгалж, долоо хоногт нэг удаа screen time-аа шалгаж бай.")
+    return recs
+
+
+def format_zip_style_profile_report(
+    model: Pipeline,
+    case_df: pd.DataFrame,
+    training_df: pd.DataFrame,
+    model_name: str,
+    model_metrics: pd.Series | None = None,
+    baseline_macro_f1: float | None = None,
+) -> str:
+    ml_prediction = str(model.predict(case_df)[0])
+    score, score_label = score_single_profile(case_df)
+    final_label = more_severe_label(ml_prediction, score_label)
+    recs = make_single_profile_recommendations(case_df, final_label)
+
+    lines = [
+        "=== Сэтгэцийн эрүүл мэндийн эрсдэлийн өөрийгөө шалгах тест ===",
+        "",
+        f"Сургагдсан загвар: {model_name}",
+    ]
+
+    if model_metrics is not None:
+        macro_f1 = float(model_metrics["Macro F1"])
+        balanced_acc = float(model_metrics["Balanced Accuracy"])
+        lines.append(f"Model Macro F1: {macro_f1:.2f} | Balanced Accuracy: {balanced_acc:.2f}")
+
+    lines.extend(
+        [
+            "Анхааруулга: Энэ нь онош биш, зөвхөн сургалтын/өөрийгөө ажиглах зорилготой.",
+            "",
+            "--- Үр дүн ---",
+            f"Эцсийн эрсдэлийн ангилал: {risk_label(final_label)}",
+            f"ML загварын таамаглал: {risk_label(ml_prediction)}",
+            f"Өөрийгөө шалгах оноо: {score}/100 ({risk_label(score_label)})",
+        ]
+    )
+
+    if baseline_macro_f1 is not None and model_metrics is not None:
+        macro_f1 = float(model_metrics["Macro F1"])
+        if macro_f1 <= baseline_macro_f1 + 0.01:
+            lines.append("Санамж: энэ model baseline-тай ойролцоо тул таамаглалыг болгоомжтой тайлбарлана.")
+
+    if hasattr(model, "predict_proba"):
+        try:
+            probabilities = model.predict_proba(case_df)[0]
+            proba_pairs = sorted(zip(model.classes_, probabilities), key=lambda item: item[1], reverse=True)
+            lines.append("")
+            lines.append("Ангилал тус бүрийн магадлал:")
+            for label, prob in proba_pairs:
+                lines.append(f"- {risk_label(str(label))}: {prob * 100:.1f}%")
+        except Exception:
+            pass
+
+    lines.extend(["", "Тайлбар:", profile_explanation(final_label), "", "Зөвлөмж:"])
+    lines.extend([f"- {rec}" for rec in recs])
+
+    lines.extend(["", "Оруулсан мэдээлэл:"])
+    for col in case_df.columns:
+        lines.append(f"- {feature_label(col)}: {case_df.iloc[0][col]}")
+
+    lines.extend(
+        [
+            "",
+            "Үр дүнг тайлбарлахдаа:",
+            "- Сошиал медиа хэрэглээ болон унтахын өмнөх дэлгэцийн цаг өндөр байх нь эрсдэлийн дохио байж болно.",
+            "- Унтах цаг, хөдөлгөөн, бодит харилцаа бага байвал амьдралын хэв маягийн эрсдэл нэмэгдэж болно.",
+            "- Энэ үр дүн нь сургалтын зориулалттай ML үнэлгээ бөгөөд эмнэлзүйн онош биш.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def analyze_single_profile(
     model: Pipeline,
     case_df: pd.DataFrame,
@@ -606,6 +759,15 @@ def analyze_single_profile(
     model_metrics: pd.Series | None = None,
     baseline_macro_f1: float | None = None,
 ) -> str:
+    return format_zip_style_profile_report(
+        model=model,
+        case_df=case_df,
+        training_df=training_df,
+        model_name=model_name,
+        model_metrics=model_metrics,
+        baseline_macro_f1=baseline_macro_f1,
+    )
+
     prediction = model.predict(case_df)[0]
     lines = [
         "Нэг хүний мэдээлэл дээр хийсэн шинжилгээ",
@@ -725,12 +887,12 @@ def collect_profile_from_console(X: pd.DataFrame) -> pd.DataFrame:
     categorical_features = [col for col in X.columns if col not in numeric_features]
 
     for col in numeric_features:
-        values[col] = prompt_float(col, X[col].median(), X[col].min(), X[col].max())
+        values[col] = prompt_float(feature_label(col), X[col].median(), X[col].min(), X[col].max())
 
     for col in categorical_features:
         choices = sorted(X[col].dropna().astype(str).unique().tolist())
         default = X[col].mode(dropna=True).iloc[0] if not X[col].mode(dropna=True).empty else choices[0]
-        values[col] = prompt_category(col, choices, str(default))
+        values[col] = prompt_category(feature_label(col), choices, str(default))
 
     return pd.DataFrame([values], columns=X.columns)
 
