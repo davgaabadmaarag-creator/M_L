@@ -21,6 +21,22 @@ python ml\stat.py
 Нэг хүний мэдээлэл оруулж таамаглал хийх:
 python stat.py --interactive
 
+Combined screen addiction self-test app:
+python screen_addiction_app.py --cli
+
+GUI version on Windows:
+python screen_addiction_app.py
+
+From the project root, use:
+python ml\screen_addiction_app.py --cli
+
+Git Bash command:
+python ml/screen_addiction_app.py --cli
+
+The self-test app writes:
+- results/screen_addiction_prediction.txt
+- results/screen_addiction_user_input.csv
+
 results/ хавтаст гарах гол файлууд:
 - model_results.txt
 - accuracy_comparison.csv / accuracy_comparison.png

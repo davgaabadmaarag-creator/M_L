@@ -22,6 +22,34 @@ python stat.py
 python ml\stat.py --interactive
 ```
 
+## Combined screen addiction app
+
+The project also includes the merged self-test app from
+`screen_addiction_student_test`.
+
+From the project root:
+
+```powershell
+python ml\screen_addiction_app.py --cli
+```
+
+From Git Bash:
+
+```bash
+python ml/screen_addiction_app.py --cli
+```
+
+To open the GUI version on Windows:
+
+```powershell
+python ml\screen_addiction_app.py
+```
+
+The self-test app saves its latest output to:
+
+- `ml/results/screen_addiction_prediction.txt`
+- `ml/results/screen_addiction_user_input.csv`
+
 Энэ горим нь нас, сошиал медиа ашигласан цаг, унтах цаг, унтахын өмнөх дэлгэцийн цаг, хөдөлгөөн, платформ, нийгмийн харилцааны түвшин зэрэг мэдээллийг асуугаад тухайн хүний эрсдэлийн ангиллыг таамаглана.
 
 ## Үр дүн
